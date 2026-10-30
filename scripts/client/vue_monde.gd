@@ -25,7 +25,22 @@ const TEX_DECOS := {
 	Monde.Deco.FOURNEAU: preload("res://assets/decors/fourneau.png"),
 	Monde.Deco.ENCLUME: preload("res://assets/decors/enclume.png"),
 	Monde.Deco.COFFRE: preload("res://assets/decors/coffre.png"),
+	Monde.Deco.MUR_BOIS: preload("res://assets/decors/mur_bois.png"),
+	Monde.Deco.MUR_PIERRE: preload("res://assets/decors/mur_pierre.png"),
+	Monde.Deco.MUR_METAL: preload("res://assets/decors/mur_metal.png"),
+	Monde.Deco.PORTE_BOIS: preload("res://assets/decors/porte_bois.png"),
+	Monde.Deco.PORTE_BOIS_OUVERTE: preload("res://assets/decors/porte_bois_ouverte.png"),
+	Monde.Deco.PORTE_METAL: preload("res://assets/decors/porte_metal.png"),
+	Monde.Deco.PORTE_METAL_OUVERTE: preload("res://assets/decors/porte_metal_ouverte.png"),
+	Monde.Deco.SOL_BOIS: preload("res://assets/decors/sol_bois.png"),
+	Monde.Deco.SOL_PIERRE: preload("res://assets/decors/sol_pierre.png"),
+	Monde.Deco.PIEGE: preload("res://assets/decors/piege.png"),
 }
+## Murs et portes : alignés sur la case (pas de décalage au hasard), le bas sur le bord de la case.
+const DECOS_CONSTRUITES := [Monde.Deco.MUR_BOIS, Monde.Deco.MUR_PIERRE, Monde.Deco.MUR_METAL, Monde.Deco.PORTE_BOIS,
+	Monde.Deco.PORTE_BOIS_OUVERTE, Monde.Deco.PORTE_METAL, Monde.Deco.PORTE_METAL_OUVERTE]
+## Sols et pièges : à plat sous les personnages.
+const DECOS_PLATES := [Monde.Deco.SOL_BOIS, Monde.Deco.SOL_PIERRE, Monde.Deco.PIEGE]
 const DECOS_AU_SOL := [Monde.Deco.FLEURS, Monde.Deco.OS, Monde.Deco.ROSEAUX]
 const DECOS_HAUTES := [Monde.Deco.ARBRE, Monde.Deco.SAPIN, Monde.Deco.SAPIN_NEIGE, Monde.Deco.ARBRE_MORT]
 const TEX_FEU := preload("res://assets/decors/feu_de_camp.png")
@@ -36,6 +51,9 @@ var monde: Monde
 var sol: TileMapLayer
 ## Les personnages s'ajoutent ici pour être triés avec les arbres et les rochers.
 var objets: Node2D
+## Sols construits et pièges : dessinés après le terrain et avant les personnages.
+var plats: Node2D
+var _plats := {} # Vector2i (morceau) -> Node2D
 var nuit: CanvasModulate
 ## Images de carte des morceaux vus pendant la partie : Vector2i -> ImageTexture
 var cartes := {}
@@ -54,6 +72,8 @@ func _ready() -> void:
 	sol = TileMapLayer.new()
 	sol.tile_set = _creer_tileset()
 	add_child(sol)
+	plats = Node2D.new()
+	add_child(plats)
 	objets = Node2D.new()
 	objets.y_sort_enabled = true
 	add_child(objets)
@@ -96,6 +116,9 @@ func afficher_morceau(cle: Vector2i) -> void:
 	conteneur.y_sort_enabled = true
 	objets.add_child(conteneur)
 	_conteneurs[cle] = conteneur
+	var plat := Node2D.new()
+	plats.add_child(plat)
+	_plats[cle] = plat
 	for i in Monde.CASES:
 		var c := base + Vector2i(i % Monde.TAILLE_MORCEAU, i / Monde.TAILLE_MORCEAU)
 		var s: int = m.sol[i]
@@ -125,14 +148,25 @@ func _creer_deco(conteneur: Node2D, c: Vector2i, d: int) -> void:
 		return
 	var spr := Sprite2D.new()
 	spr.texture = TEX_DECOS[d]
+	if d in DECOS_CONSTRUITES or d in DECOS_PLATES:
+		spr.position = centre_case(c)
+		if d in DECOS_CONSTRUITES:
+			spr.position.y = (c.y + 1) * t
+			spr.offset = Vector2(0, -spr.texture.get_height() / 2.0)
+			conteneur.add_child(spr)
+		else:
+			_plats[Monde.cle_de_case(c.x, c.y)].add_child(spr)
+		_decos[c] = spr
+		return
 	spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 4)
 	spr.position = pied + Vector2(int(hasard * 1000) % 7 - 3, 0)
 	spr.flip_h = int(hasard * 10000) % 2 == 0
-	if d in DECOS_AU_SOL:
-		spr.z_index = -1 # au ras du sol
 	if d in DECOS_HAUTES:
 		_arbres[c] = spr
-	conteneur.add_child(spr)
+	if d in DECOS_AU_SOL:
+		_plats[Monde.cle_de_case(c.x, c.y)].add_child(spr) # au ras du sol, sous les personnages
+	else:
+		conteneur.add_child(spr)
 	_decos[c] = spr
 
 
@@ -172,6 +206,8 @@ func retirer_morceau(cle: Vector2i) -> void:
 	_transparents.clear()
 	_conteneurs[cle].queue_free()
 	_conteneurs.erase(cle)
+	_plats[cle].queue_free()
+	_plats.erase(cle)
 
 
 func morceaux_affiches() -> Array:

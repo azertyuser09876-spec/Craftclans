@@ -15,6 +15,7 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 | 3 | Ressources : récolte, minerais selon le danger, rôle Mineur, inventaire, mort (tout tombe sur le corps, pillable) | ✅ v0.3.0 |
 | 4 | Craft et équipement : établi, fourneau, enclume, lingots, plans dans des coffres, armures par pièce avec bonus d'ensemble, armes, outils, amélioration +1 à +3 | ✅ v0.4.0 |
 | 5 | Niveaux et arbres de compétences : niveaux 1 à 30, expérience (récolte, craft, coffres, combats), 3 points de caractéristiques et 1 point de compétence par niveau, un arbre par rôle, arbre secondaire, bonus selon l'équipement | ✅ v0.5.0 |
+| 6 | Bases et construction : murs, portes, sols, pièges, coffres, coffres sécurisés, lits, cœurs de base, tourelles (grille ou placement libre), dégâts selon le type et le matériau, renforcement, destruction totale, réapparition en base, rôle ingénieur | ✅ v0.6.0 |
 | … | voir la feuille de route du document de conception | |
 
 ## Jouer
@@ -38,6 +39,7 @@ scripts/commun/   partagé par le jeu et le serveur
   objets.gd         objets, ressources données par chaque décor, règles d'inventaire
   equipement.gd     équipement (généré à partir des matériaux), recettes, bonus, amélioration
   progression.gd    niveaux, expérience, caractéristiques, arbres de compétences
+  batiments.gd      constructions : murs, portes, coffres, tourelles, matériaux et dégâts
   donnees_boss.gd   liste des boss mondiaux
 scripts/serveur/  serveur dédié
   serveur.gd        logique du serveur (il fait autorité sur tout)
@@ -47,11 +49,12 @@ scripts/serveur/  serveur dédié
   recolte.gd        récolte, repousse des décors, inventaires, sacs au sol et corps
   atelier.gd        fabriquer, poser les stations, s'équiper, améliorer
   experience.gd     gain d'expérience, montée de niveau, points et oubli
+  construction.gd   poser, gérer, endommager les constructions ; portes, pièges, tourelles, réapparition
   panneau_admin.gd  fenêtre de gestion du serveur
 scripts/client/   le jeu
   menu.gd, jeu.gd, vue_monde.gd, carte_vue.gd (minicarte et grande carte), joueur_visuel.gd, joystick.gd, theme_jeu.gd,
   effets.gd, barre_combat.gd, mannequin_visuel.gd, inventaire_vue.gd, fabrication_vue.gd,
-                    personnage_vue.gd
+                    personnage_vue.gd, construction_vue.gd
 assets/           images (générées par outils/generer_assets.py)
 distribution/     fichiers ajoutés aux zips (lisez-moi, .bat du serveur)
 outils/           générateur d'assets, script de version

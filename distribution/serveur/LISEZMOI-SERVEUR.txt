@@ -36,6 +36,9 @@ La fenêtre de gestion
   Boss mondiaux : activer, endormir, programmer à une date ou chaque semaine.
   Console : journal et commandes (tape « aide »). Étape 5 : progression <joueur>,
             oublier <joueur>, et en triche xp [joueur] <nombre>, niveau [joueur] <1-30>.
+            Étape 6 : constructions (nombre par joueur et emplacement des bases).
+  Les bases tiennent même quand leurs joueurs sont hors ligne : tourelles et pièges
+  fonctionnent tant que le serveur tourne.
 
 Devenir admin en jeu
   Le tout premier joueur qui se connecte devient admin. Sinon : /login <mot de passe>

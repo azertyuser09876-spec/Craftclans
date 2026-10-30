@@ -84,6 +84,17 @@ var _recolte_envoyee := false
 var _recolte_case := Vector2i.ZERO
 var _recolte_progres := -1.0
 
+# Constructions (étape 6)
+var constructions := {} # id -> infos
+var _noeuds_c := {} # id -> Node2D (constructions libres)
+var _construction_vue: ConstructionVue
+var _barres_c: Node2D # vie des constructions abîmées
+var _construire_case := -1 # case de l'inventaire en cours de pose (-1 : pas en mode construction)
+var _construire_grille := true
+var _fantome: Sprite2D
+var _aide_construction: Label
+var _boutons_construction: HBoxContainer
+
 
 func _ready() -> void:
 	mon_id = int(infos.id)
@@ -140,6 +151,17 @@ func _ready() -> void:
 		_fabrication_vue.maj(inv, _fabrication_vue.stations))
 	Reseau.recolte_recue.connect(func(p, _c): _recolte_progres = p)
 	Reseau.progression_recue.connect(_sur_progression)
+	Reseau.constructions_recues.connect(func(l):
+		for id in constructions.keys():
+			_retirer_construction(id)
+		for i in l:
+			_maj_construction(i))
+	Reseau.construction_recue.connect(_maj_construction)
+	Reseau.construction_retiree.connect(_retirer_construction)
+	Reseau.contenu_recu.connect(func(id, contenu):
+		if _construction_vue.visible and int(_construction_vue.rec.get("id", -1)) == id:
+			_construction_vue.contenu = contenu
+			_construction_vue.rafraichir())
 	Reseau.sacs_recus.connect(func(liste):
 		for infos_sac in liste:
 			_ajouter_sac(infos_sac))
@@ -155,7 +177,28 @@ func _ready() -> void:
 			if c.begins_with("@"):
 				delai = float(c.get_slice(" ", 0).substr(1))
 				c = c.substr(c.find(" ") + 1)
-			if c.begins_with("#"): # « #personnage » : ouvre une fenêtre (tests, captures)
+			if c.begins_with("*"): # « *attaque 100 200 » : attaque vers ce point (tests)
+				var m := c.substr(1).split(" ")
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_action.rpc_id.bind(1, m[0], Vector2(float(m[1]), float(m[2])), 1.0))
+			elif c.begins_with("+"): # « +3 100 200 1 » : pose l'objet de la case 3 en (100, 200), sur la grille (tests)
+				var m := c.substr(1).split(" ")
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_construire.rpc_id.bind(1, int(m[0]),
+					Vector2(float(m[1]), float(m[2])), m.size() < 4 or m[3] == "1"))
+			elif c.begins_with("&"): # « &ouvrir 5 0 » : action sur une construction (tests)
+				var m := c.substr(1).split(" ")
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_construction.rpc_id.bind(1, m[0], int(m[1]), int(m[2]) if m.size() > 2 else 0))
+			elif c.begins_with("#construire ") or c.begins_with("#gerer "): # mode construction, fenêtre d'une construction (tests)
+				var n := int(c.get_slice(" ", 1))
+				var type := c.get_slice(" ", 1)
+				get_tree().create_timer(delai).timeout.connect(func():
+					if c.begins_with("#construire "):
+						_debut_construction(n)
+						return
+					for i in constructions.values():
+						if i.type == type:
+							_ouvrir_construction(i)
+							return)
+			elif c.begins_with("#"): # « #personnage » : ouvre une fenêtre (tests, captures)
 				var f: Control = {"inventaire": _inventaire_vue, "fabriquer": _fabrication_vue, "personnage": _personnage_vue}.get(c.substr(1).strip_edges())
 				if f:
 					get_tree().create_timer(delai).timeout.connect(_basculer_fenetre.bind(f))
@@ -170,7 +213,7 @@ func _ready() -> void:
 func _en_jeu() -> bool:
 	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible \
 		and not _grande_carte.visible and not _inventaire_vue.visible and not _fabrication_vue.visible \
-		and not _personnage_vue.visible
+		and not _personnage_vue.visible and not _construction_vue.visible
 
 
 # ------------------------------------------------------------------ Boucle
@@ -245,6 +288,8 @@ func _process(delta: float) -> void:
 		Reseau.c_ping.rpc_id(1, Time.get_ticks_msec())
 	_maj_combat()
 	_maj_interaction(delta)
+	_maj_construction_mode()
+	_barres_c.queue_redraw()
 	_maj_lieu()
 	_info.text = "Craftclans %s  |  %d joueur(s)  |  ping %d ms  |  %02d:%02d%s" % [
 		Config.version, autres.size() + 1, _ping, int(heure), int(fmod(heure, 1.0) * 60),
@@ -274,6 +319,9 @@ func _maj_lieu() -> void:
 	for s in sacs.values():
 		if s.infos.genre == "corps":
 			marqueurs.append([s.infos.pos, Color(1, 0.6, 0.15) if s.infos.nom == infos.nom else Color(0.75, 0.75, 0.75)])
+	for i in constructions.values():
+		if i.type == "coeur_base":
+			marqueurs.append([i.pos, Color(0.4, 0.8, 1.0) if _allie_de(str(i.proprio)) else Color(0.85, 0.3, 0.9)])
 	for carte in [_minicarte, _grande_carte]:
 		if carte.visible:
 			carte.centre = _mvt.pos
@@ -310,6 +358,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_debug = not _debug
 		if not (reglages.mode_dev or reglages.admin):
 			_ajouter_message("Le mode développeur est désactivé sur ce serveur.", "systeme")
+	elif event.is_action_pressed("menu") and _construire_case >= 0 and not _saisie.has_focus():
+		_fin_construction()
 	elif event.is_action_pressed("menu"):
 		if _saisie.has_focus():
 			_saisie.release_focus()
@@ -324,6 +374,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_fabrication_vue.visible = false
 		elif _personnage_vue.visible:
 			_personnage_vue.visible = false
+		elif _construction_vue.visible:
+			_construction_vue.fermer_fenetre()
 		else:
 			_menu_pause.visible = not _menu_pause.visible
 	elif event.is_action_pressed("inventaire") and not _saisie.has_focus() and not _menu_pause.visible:
@@ -337,6 +389,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif not _en_jeu() or _visee_tactile:
 		return
+	elif _construire_case >= 0 and event.is_action_pressed("grille"):
+		_construire_grille = not _construire_grille
+	elif _construire_case >= 0 and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_poser()
+		get_viewport().set_input_as_handled()
+	elif _construire_case >= 0 and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		_fin_construction()
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("interagir"):
 		_interagir()
 	elif event.is_action_pressed("role"):
@@ -480,7 +540,7 @@ func _dessiner_visee() -> void:
 			var portee := Roles.portee(cap, _charge())
 			_dessin_visee.draw_line(depart + Vector2(0, -10), depart + Vector2(0, -10) + dir * portee, couleur, 3.0)
 			_dessin_visee.draw_line(depart + Vector2(0, -10), depart + Vector2(0, -10) + dir * float(cap.portee_max), Color(1, 1, 1, 0.15), 1.0)
-		"lancer", "zone_visee":
+		"lancer", "zone_visee", "tourelle":
 			var portee := float(cap.portee)
 			_dessin_visee.draw_arc(depart, portee, 0, TAU, 64, Color(1, 1, 1, 0.15), 1.5)
 			var point: Vector2 = cible if depart.distance_to(cible) <= portee else depart + dir * portee
@@ -721,6 +781,11 @@ func _sur_evenement(genre: String, d: Dictionary) -> void:
 				var tw_n := create_tween()
 				tw_n.tween_interval(3.5)
 				tw_n.tween_property(_banniere, "modulate:a", 0.0, 1.2)
+		"construction":
+			effets.explosion(d.pos + Vector2(0, -8), "impact", 0.6)
+		"destruction":
+			effets.explosion(d.pos + Vector2(0, -10), "explosion", 1.0)
+			_secousse = maxf(_secousse, 0.4) if _mvt.pos.distance_to(d.pos) < 200.0 else _secousse
 		"mannequin_retire":
 			if mannequins.has(int(d.id)):
 				mannequins[int(d.id)].queue_free()
@@ -776,6 +841,17 @@ func _chercher_cible() -> Dictionary:
 			meilleur = {"genre": "sac", "id": int(s.infos.id), "pos": s.infos.pos, "infos": s.infos}
 	if not meilleur.is_empty():
 		return meilleur
+	# Constructions (sauf sols et stations, gérés plus bas)
+	meilleure_dist = Objets.PORTEE_RECOLTE + 4.0
+	for i in constructions.values():
+		if i.type in ["sol_bois", "sol_pierre", "etabli", "fourneau", "enclume"]:
+			continue
+		var d: float = _mvt.pos.distance_to(i.pos)
+		if d <= meilleure_dist:
+			meilleure_dist = d
+			meilleur = {"genre": "construction", "id": int(i.id), "pos": i.pos, "infos": i}
+	if not meilleur.is_empty():
+		return meilleur
 	meilleure_dist = Objets.PORTEE_RECOLTE
 	var c0 := Vector2i((_mvt.pos / Config.TAILLE_TUILE).floor())
 	for dy in range(-2, 3):
@@ -791,12 +867,18 @@ func _chercher_cible() -> Dictionary:
 			if d <= meilleure_dist:
 				meilleure_dist = d
 				meilleur = {"genre": "deco", "case": c, "pos": centre, "deco": deco}
+	if meilleur.is_empty():
+		for i in constructions.values():
+			if i.type in ["sol_bois", "sol_pierre"] and _mvt.pos.distance_to(i.pos) <= 20.0:
+				return {"genre": "construction", "id": int(i.id), "pos": i.pos, "infos": i}
 	return meilleur
 
 
 func _interagir() -> void:
 	if _cible.get("genre", "") == "sac":
 		Reseau.c_ramasser.rpc_id(1, int(_cible.id))
+	elif _cible.get("genre", "") == "construction":
+		_ouvrir_construction(_cible.infos)
 
 
 func _basculer_fenetre(f: Control) -> void:
@@ -804,6 +886,7 @@ func _basculer_fenetre(f: Control) -> void:
 	_inventaire_vue.visible = false
 	_fabrication_vue.visible = false
 	_personnage_vue.visible = false
+	_construction_vue.fermer_fenetre()
 	f.visible = ouvrir
 	if ouvrir:
 		_maj_stations()
@@ -852,7 +935,17 @@ func _maj_interaction(delta: float) -> void:
 		_bouton_recolter.visible = not _cible.is_empty() or _bouton_tenu
 	if _cible.is_empty():
 		return
-	if _cible.genre == "sac":
+	if _cible.genre == "construction":
+		var ic: Dictionary = _cible.infos
+		var b := Batiments.infos(ic.type)
+		var a_moi := _allie_de(str(ic.proprio))
+		if b.has("cases") and (a_moi or not b.get("verrou", false)):
+			_invite.text = "%sOuvrir : %s%s" % [touche, b.nom, "" if a_moi else " de " + str(ic.proprio)]
+		elif a_moi:
+			_invite.text = "%s%s (gérer)" % [touche, b.nom]
+		else:
+			_invite.text = "%s de %s (%d/%d)" % [b.nom, ic.proprio, ic.vie, ic.max]
+	elif _cible.genre == "sac":
 		var i: Dictionary = _cible.infos
 		var quoi := "le sac (%d objets)" % int(i.n)
 		if i.genre == "corps":
@@ -1004,6 +1097,8 @@ func _creer_interface() -> void:
 	_inventaire_vue.action.connect(func(genre, valeur):
 		if genre == "jeter":
 			Reseau.c_jeter.rpc_id(1, int(valeur))
+		elif genre == "poser":
+			_debut_construction(int(valeur))
 		else:
 			Reseau.c_atelier.rpc_id(1, genre, valeur))
 	centre.add_child(_inventaire_vue)
@@ -1015,6 +1110,11 @@ func _creer_interface() -> void:
 	_personnage_vue.visible = false
 	_personnage_vue.demande.connect(func(genre, valeur): Reseau.c_progression.rpc_id(1, genre, valeur))
 	centre.add_child(_personnage_vue)
+	_construction_vue = ConstructionVue.new()
+	_construction_vue.visible = false
+	_construction_vue.action.connect(func(genre, id, valeur): Reseau.c_construction.rpc_id(1, genre, id, valeur))
+	centre.add_child(_construction_vue)
+	_creer_construction()
 	_invite = Label.new()
 	_invite.z_index = 30
 	_invite.custom_minimum_size = Vector2(200, 0)
@@ -1120,7 +1220,7 @@ func _creer_interface() -> void:
 		_choix_role.visible = true)
 	vb.add_child(changer)
 	var aide := Label.new()
-	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire    C : fabriquer    P : personnage\nEntrée : chat (/aide)    F3 : infos développeur"
+	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire (Construire)    C : fabriquer    P : personnage    G : grille / libre\nEntrée : chat (/aide)    F3 : infos développeur"
 	aide.add_theme_font_size_override("font_size", 14)
 	aide.modulate.a = 0.7
 	vb.add_child(aide)
@@ -1212,3 +1312,201 @@ func _ajouter_message(texte: String, genre: String) -> void:
 	tw.tween_interval(duree)
 	tw.tween_property(l, "modulate:a", 0.0, 2.0)
 	tw.tween_callback(l.queue_free)
+
+
+# ------------------------------------------------------------------ Constructions (étape 6)
+
+func _allie_de(proprio: String) -> bool:
+	if proprio == "" or proprio == str(infos.nom):
+		return true
+	if reglages.equipe == "":
+		return false
+	for a in autres.values():
+		if a.nom == proprio:
+			return a.equipe == reglages.equipe
+	return false
+
+
+func _maj_construction(i: Dictionary) -> void:
+	var id := int(i.id)
+	constructions[id] = i
+	if not i.grille and not _noeuds_c.has(id):
+		var spr := Sprite2D.new()
+		var chemin := "res://assets/constructions/%s.png" % i.type
+		spr.texture = load(chemin) if ResourceLoader.exists(chemin) else TEX_SAC
+		spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 3)
+		spr.position = i.pos
+		if i.get("temporaire", false):
+			spr.modulate = Color(0.75, 0.9, 1.0, 0.85)
+		vue.objets.add_child(spr)
+		_noeuds_c[id] = spr
+	if _construction_vue.visible and int(_construction_vue.rec.get("id", -1)) == id:
+		_construction_vue.rec = i
+		_construction_vue.rafraichir()
+
+
+func _retirer_construction(id: int) -> void:
+	constructions.erase(id)
+	if _noeuds_c.has(id):
+		_noeuds_c[id].queue_free()
+		_noeuds_c.erase(id)
+	if _construction_vue.visible and int(_construction_vue.rec.get("id", -1)) == id:
+		_construction_vue.visible = false
+
+
+func _ouvrir_construction(i: Dictionary) -> void:
+	var b := Batiments.infos(i.type)
+	var a_moi := _allie_de(str(i.proprio))
+	if not a_moi and not b.has("cases"):
+		return
+	_inventaire_vue.visible = false
+	_fabrication_vue.visible = false
+	_personnage_vue.visible = false
+	_construction_vue.ouvrir(i, a_moi, inventaire)
+	if b.has("cases"):
+		Reseau.c_construction.rpc_id(1, "ouvrir", int(i.id), 0)
+
+
+func _dessiner_barres_constructions() -> void:
+	for i in constructions.values():
+		if int(i.vie) >= int(i.max) or _mvt.pos.distance_to(i.pos) > 500.0:
+			continue
+		var haut := 52.0 if i.grille and Batiments.infos(i.type).get("deco", -1) in Monde.DECOS_PLEINES else 40.0
+		var r := Rect2(i.pos + Vector2(-14, -haut), Vector2(28, 4))
+		var part := clampf(float(i.vie) / maxf(1.0, float(i.max)), 0.0, 1.0)
+		_barres_c.draw_rect(r.grow(1), Color(0, 0, 0, 0.75))
+		_barres_c.draw_rect(Rect2(r.position, Vector2(28 * part, 4)), Color(0.9, 0.3, 0.2).lerp(Color(0.95, 0.85, 0.3), part))
+
+
+func _creer_construction() -> void:
+	_barres_c = Node2D.new()
+	_barres_c.z_index = 20
+	_barres_c.draw.connect(_dessiner_barres_constructions)
+	vue.add_child(_barres_c)
+	_fantome = Sprite2D.new()
+	_fantome.z_index = 10
+	_fantome.visible = false
+	vue.add_child(_fantome)
+	_aide_construction = Label.new()
+	_aide_construction.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_aide_construction.position = Vector2(-300, -150)
+	_aide_construction.custom_minimum_size = Vector2(600, 0)
+	_aide_construction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_aide_construction.add_theme_font_size_override("font_size", 15)
+	_aide_construction.add_theme_constant_override("outline_size", 5)
+	_aide_construction.add_theme_color_override("font_outline_color", Color.BLACK)
+	_aide_construction.visible = false
+	_ui.add_child(_aide_construction)
+	if Config.est_mobile():
+		_boutons_construction = HBoxContainer.new()
+		_boutons_construction.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_boutons_construction.position = Vector2(-220, -110)
+		_boutons_construction.add_theme_constant_override("separation", 10)
+		_boutons_construction.visible = false
+		_ui.add_child(_boutons_construction)
+		for d in [["Poser", _poser], ["Grille / libre", func(): _construire_grille = not _construire_grille], ["Fin", _fin_construction]]:
+			var b := Button.new()
+			b.text = d[0]
+			b.custom_minimum_size = Vector2(130, 56)
+			b.pressed.connect(d[1])
+			_boutons_construction.add_child(b)
+
+
+func _debut_construction(case: int) -> void:
+	if case < 0 or case >= inventaire.size() or inventaire[case].is_empty() or not Batiments.existe(str(inventaire[case].id)):
+		return
+	_construire_case = case
+	_inventaire_vue.visible = false
+	_fantome.visible = true
+	_aide_construction.visible = true
+	if _boutons_construction:
+		_boutons_construction.visible = true
+
+
+func _fin_construction() -> void:
+	_construire_case = -1
+	_fantome.visible = false
+	_aide_construction.visible = false
+	if _boutons_construction:
+		_boutons_construction.visible = false
+
+
+## Position de pose : la souris (à portée) ou devant le joueur sur téléphone.
+func _point_construction() -> Vector2:
+	var p: Vector2
+	if Config.est_mobile():
+		p = _mvt.pos + _mvt.regard * 40.0
+	else:
+		p = vue.get_global_mouse_position()
+		if p.distance_to(_mvt.pos) > Batiments.PORTEE:
+			p = _mvt.pos + (p - _mvt.pos).normalized() * Batiments.PORTEE
+	var type := _type_construction()
+	if Batiments.grille_seulement(type) or _construire_grille:
+		p = VueMonde.centre_case(Vector2i((p / Config.TAILLE_TUILE).floor()))
+	return p
+
+
+func _type_construction() -> String:
+	if _construire_case < 0 or _construire_case >= inventaire.size() or inventaire[_construire_case].is_empty():
+		return ""
+	return str(inventaire[_construire_case].id)
+
+
+func _poser() -> void:
+	var type := _type_construction()
+	if type == "":
+		_fin_construction()
+		return
+	Reseau.c_construire.rpc_id(1, _construire_case, _point_construction(), _construire_grille)
+
+
+func _maj_construction_mode() -> void:
+	if _construire_case < 0:
+		return
+	var type := _type_construction()
+	if type == "" or not Batiments.existe(type):
+		# Plus rien à poser dans cette case : on cherche la même chose ailleurs, sinon on arrête.
+		_fin_construction()
+		return
+	var b := Batiments.infos(type)
+	var p := _point_construction()
+	if b.mode == "grille":
+		var tex: Texture2D = VueMonde.TEX_DECOS.get(int(b.deco))
+		_fantome.texture = tex
+		_fantome.offset = Vector2(0, -tex.get_height() / 2.0 + 4) if tex else Vector2.ZERO
+		_fantome.position = p + Vector2(0, Config.TAILLE_TUILE * 0.2)
+		if int(b.deco) in VueMonde.DECOS_CONSTRUITES:
+			_fantome.position = p + Vector2(0, Config.TAILLE_TUILE * 0.5)
+			_fantome.offset = Vector2(0, -tex.get_height() / 2.0)
+		elif int(b.deco) in VueMonde.DECOS_PLATES:
+			_fantome.position = p
+			_fantome.offset = Vector2.ZERO
+	else:
+		var chemin := "res://assets/constructions/%s.png" % type
+		_fantome.texture = load(chemin) if ResourceLoader.exists(chemin) else TEX_SAC
+		_fantome.offset = Vector2(0, -_fantome.texture.get_height() / 2.0 + 3)
+		_fantome.position = p
+	var ok := _pose_possible(type, p)
+	_fantome.modulate = Color(0.6, 1, 0.6, 0.6) if ok else Color(1, 0.4, 0.4, 0.6)
+	var touches := "" if Config.est_mobile() else "Clic gauche : poser   ·   %sÉchap ou clic droit : terminer" % ("" if b.mode == "grille" else "G : grille / libre   ·   ")
+	_aide_construction.text = "Construction : %s (×%d)%s\n%s" % [b.nom, Objets.compter(inventaire, type),
+		"" if b.mode == "grille" else ("   ·   sur la grille" if _construire_grille else "   ·   placement libre"), touches]
+
+
+## Vérification côté jeu (le serveur décide) : case libre pour la grille, pas d'obstacle sinon.
+func _pose_possible(type: String, p: Vector2) -> bool:
+	var c := Vector2i((p / Config.TAILLE_TUILE).floor())
+	if monde.sol_en(c.x, c.y) in Monde.SOLS_BLOQUANTS:
+		return false
+	var d := monde.deco_en(c.x, c.y)
+	if Batiments.grille_seulement(type):
+		var boite := Rect2(Vector2(c) * Config.TAILLE_TUILE, Vector2.ONE * Config.TAILLE_TUILE).grow(Config.RAYON_JOUEUR)
+		if Batiments.infos(type).deco in Monde.DECOS_BLOQUANTES and boite.has_point(_mvt.pos):
+			return false
+		return d == Monde.Deco.AUCUN
+	if d != Monde.Deco.AUCUN and not d in [Monde.Deco.SOL_BOIS, Monde.Deco.SOL_PIERRE, Monde.Deco.FLEURS, Monde.Deco.OS]:
+		return false
+	for i in constructions.values():
+		if not i.grille and Vector2(i.pos).distance_to(p) < Batiments.ECART_LIBRE:
+			return false
+	return true

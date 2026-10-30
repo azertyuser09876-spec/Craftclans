@@ -37,6 +37,7 @@ Admin :
   monde                     infos sur le monde
   inventaire <joueur>       voir ce que porte un joueur
   sacs                      objets et corps au sol ; sacs retirer : tout enlever
+  constructions             nombre de constructions par joueur (bases, murs, tourelles…)
   progression <joueur>      niveau, caractéristiques et compétences d'un joueur
   oublier <joueur>          rend gratuitement tous ses points (caractéristiques et compétences)
   boss activer|endormir <id>
@@ -86,7 +87,7 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 			if console:
 				return "La console du serveur a tous les droits."
 			var c := Vector2i(auteur.pos / Config.TAILLE_TUILE)
-			return "Position : %d %d. Admin : %s." % [c.x, c.y, "oui" if serveur.est_admin(auteur.nom) else "non"]
+			return "Position : %d %d. Vie : %d/%d. Admin : %s." % [c.x, c.y, auteur.vie, auteur.vie_max, "oui" if serveur.est_admin(auteur.nom) else "non"]
 		"login":
 			if console or args.is_empty():
 				return "Utilisation : /login <mot de passe>"
@@ -207,6 +208,19 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 				return "Utilisation : niveau [joueur] <1-%d>" % Progression.NIVEAU_MAX
 			serveur.experience.definir_niveau(cible_n.s, int(cible_n.args[0]))
 			return "%s est niveau %d." % [cible_n.s.nom, cible_n.s.progression.niveau]
+		"constructions":
+			var par_joueur := {}
+			var bases := []
+			for rec in serveur.construction.liste.values():
+				par_joueur[rec.proprio] = par_joueur.get(rec.proprio, 0) + 1
+				if rec.type == "coeur_base":
+					bases.append("%s (%d, %d)" % [rec.proprio, floori(rec.pos.x / Config.TAILLE_TUILE), floori(rec.pos.y / Config.TAILLE_TUILE)])
+			var lignes := ["%d constructions." % serveur.construction.liste.size()]
+			for qui in par_joueur:
+				lignes.append("  %s : %d" % [qui if qui != "" else "(sans propriétaire)", par_joueur[qui]])
+			if not bases.is_empty():
+				lignes.append("  Bases : " + _joindre(bases, ", "))
+			return _joindre(lignes, "\n")
 		"progression":
 			var cible_p := _cible(args, auteur)
 			if cible_p.s.is_empty(): return "Utilisation : progression <joueur>"

@@ -148,6 +148,8 @@ func action(s: Dictionary, genre: String, cible: Vector2, charge: float) -> void
 				zones_a_venir.append({"t": temps + delai + i * 0.35, "pos": vers, "cap": cap, "par": s.id, "genre": "pluie"})
 		"zone_soi":
 			_zone(s, pos, cap, s.role)
+		"tourelle":
+			serveur.construction.tourelle_temporaire(s, vers, cap)
 		"buff":
 			s.effets[cap.effet] = temps + float(cap.duree)
 			_evenement("buff", {"id": s.id, "effet": cap.effet})
@@ -160,6 +162,13 @@ func _melee(s: Dictionary, cap: Dictionary, dir: Vector2) -> void:
 	for c in _cibles_dans_cercle(s.pos, float(cap.portee) + RAYON_CIBLE):
 		var vers_cible: Vector2 = c.pos - s.pos
 		if vers_cible.length() > 4.0 and absf(dir.angle_to(vers_cible)) > demi_angle:
+			continue
+		if c.genre == "c":
+			# Construction : la clé de l'ingénieur répare celles de son équipe, les autres coups l'abîment.
+			if cap.has("repare") and serveur.construction.allie(s, c.rec.proprio):
+				serveur.construction.reparer_par(c.rec, float(cap.repare))
+			else:
+				infliger(s, c, float(cap.degats), cap.get("type", ""))
 			continue
 		if Regles.ligne_bloquee(serveur.monde, s.pos, c.pos):
 			continue
@@ -175,7 +184,7 @@ func _tirer(s: Dictionary, cap: Dictionary, dir: Vector2, charge: float) -> void
 		"id": pid, "par": s.id, "pos": s.pos + Vector2(0, -10), "dir": dir,
 		"vitesse": lerpf(cap.vitesse_proj, cap.vitesse_proj_max, charge),
 		"reste": Roles.portee(cap, charge),
-		"degats": lerpf(cap.degats, cap.degats_max, charge),
+		"degats": lerpf(cap.degats, cap.degats_max, charge), "type": cap.get("type", ""),
 	}
 	projectiles[pid] = p
 	_evenement("projectile", {"pid": pid, "de": p.pos, "dir": dir, "vitesse": p.vitesse, "portee": p.reste})
@@ -186,7 +195,7 @@ func _zone(s: Dictionary, centre: Vector2, cap: Dictionary, genre: String) -> vo
 	for c in _cibles_dans_cercle(centre, float(cap.rayon) + RAYON_CIBLE):
 		var allie: bool = c.genre == "j" and meme_equipe(s, c.s)
 		if cap.has("degats") and not allie:
-			infliger(s, c, float(cap.degats))
+			infliger(s, c, float(cap.degats), cap.get("type", ""))
 		if allie and cap.has("soin"):
 			soigner(c.s, float(cap.soin))
 		if allie and cap.has("effet"):
@@ -203,10 +212,18 @@ func _cibles_dans_cercle(centre: Vector2, rayon: float) -> Array:
 	for m in mannequins.values():
 		if m.pos.distance_to(centre) <= rayon:
 			liste.append({"genre": "m", "m": m, "pos": m.pos})
+	liste.append_array(serveur.construction.cibles_dans_cercle(centre, rayon))
 	return liste
 
 
-func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
+## type_degats : contre les constructions (tranchant, contondant, percant, explosif, pioche).
+func infliger(source: Dictionary, c: Dictionary, montant: float, type_degats := "") -> void:
+	if c.genre == "c":
+		if type_degats == "" and source.has("caps"):
+			type_degats = str(source.caps.get("attaque", {}).get("type", "contondant"))
+		serveur.construction.subir(c.rec, source, montant * (1.0 + float(source.stats.get("degats", 0.0))), type_degats)
+		_fin_ombre(source)
+		return
 	if c.genre == "m":
 		var m: Dictionary = c.m
 		montant *= 1.0 + source.stats.degats
@@ -215,13 +232,16 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 		_voler_vie(source, montant)
 		if m.vie == 0:
 			m.vie = m.max # un mannequin ne meurt pas : il se remet debout
-			serveur.experience.sur_mannequin(source)
+			if source.has("progression"):
+				serveur.experience.sur_mannequin(source)
 		_evenement("degats", {"cle": "m%d" % m.id, "montant": int(round(montant)), "pos": m.pos})
 		_fin_ombre(source)
 		return
 	var s: Dictionary = c.s
 	if s.mort or s.dieu or s.mvt.dash_f > 0 or meme_equipe(source, s):
 		return
+	if source.has("proprio") and serveur.construction.allie(s, source.proprio):
+		return # tourelles et pièges : pas sur leur équipe
 	if not serveur.donnees.reglages.get("pvp", true):
 		return
 	if _effet(s, "bouclier"):
@@ -237,7 +257,7 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 	_evenement("degats", {"cle": "j%d" % s.id, "montant": n, "pos": s.pos})
 	_voler_vie(source, n)
 	if s.vie == 0:
-		if source.id != s.id:
+		if source.id != s.id and source.has("progression"):
 			serveur.experience.sur_victoire(source, s)
 		mourir(s, source.nom)
 
@@ -280,7 +300,9 @@ func reapparaitre(s: Dictionary) -> void:
 	s.vie = s.vie_max
 	s.pret_attaque = 0.0
 	s.pret_competence = 0.0
-	serveur.teleporter(s, serveur.monde.point_apparition(randi() % 8))
+	# Réapparition dans une base de son équipe (cœur de base + lit), sinon au départ.
+	var base: Vector2 = serveur.construction.point_reapparition(s)
+	serveur.teleporter(s, serveur.monde.point_libre(base) if base.is_finite() else serveur.monde.point_apparition(randi() % 8))
 	_evenement("reapparition", {"id": s.id})
 
 
@@ -314,25 +336,40 @@ func _avancer_projectile(p: Dictionary, delta: float) -> void:
 	var depart: Vector2 = p.pos
 	var arrivee: Vector2 = depart + p.dir * pas
 	p.reste -= pas
-	var source: Dictionary = serveur.joueurs.get(p.par, {})
+	var source: Dictionary = p.get("source", serveur.joueurs.get(p.par, {}))
 	# Cible touchée sur le segment parcouru
 	for c in _cibles_dans_cercle(depart.lerp(arrivee, 0.5), pas * 0.5 + RAYON_CIBLE + 4.0):
 		if c.genre == "j" and c.s.id == p.par:
 			continue
-		if not source.is_empty() and c.genre == "j" and meme_equipe(source, c.s):
+		if not source.is_empty() and c.genre == "j" and (meme_equipe(source, c.s) \
+				or (source.has("proprio") and serveur.construction.allie(c.s, source.proprio))):
 			continue
+		if c.genre == "c" and (c.rec.case != null or source.is_empty() or serveur.construction.allie(source, c.rec.proprio)):
+			continue # les murs arrêtent le projectile plus bas ; on traverse ses propres constructions
 		var proche := Geometry2D.get_closest_point_to_segment(c.pos + Vector2(0, -10), depart, arrivee)
 		if proche.distance_to(c.pos + Vector2(0, -10)) <= RAYON_CIBLE:
 			if not source.is_empty():
-				infliger(source, c, p.degats)
+				infliger(source, c, p.degats, p.get("type", ""))
 			_fin_projectile(p, proche, true)
 			return
-	if Regles.ligne_bloquee(serveur.monde, depart, arrivee):
+	var obstacle := Regles.premier_obstacle(serveur.monde, depart, arrivee)
+	if obstacle != Regles.AUCUN_OBSTACLE:
+		var mur: Dictionary = serveur.construction.a_la_case(obstacle)
+		if not mur.is_empty() and not source.is_empty():
+			infliger(source, {"genre": "c", "rec": mur, "pos": mur.pos}, p.degats, p.get("type", ""))
 		_fin_projectile(p, arrivee, false)
 		return
 	p.pos = arrivee
 	if p.reste <= 0.0:
 		_fin_projectile(p, arrivee, false)
+
+
+## Tir d'une tourelle (source : voir Construction._source).
+func tir_construction(source: Dictionary, depart: Vector2, dir: Vector2, degats: float, portee: float) -> void:
+	var pid := _id()
+	projectiles[pid] = {"id": pid, "par": source.id, "source": source, "pos": depart, "dir": dir, "vitesse": 640.0,
+		"reste": portee, "degats": degats, "type": "percant"}
+	_evenement("projectile", {"pid": pid, "de": depart, "dir": dir, "vitesse": 640.0, "portee": portee})
 
 
 func _fin_projectile(p: Dictionary, pos: Vector2, touche: bool) -> void:
@@ -352,7 +389,7 @@ func _effet_zone_retardee(z: Dictionary) -> void:
 			if allie:
 				soigner(c.s, float(cap.soin))
 		elif not allie:
-			infliger(source, c, float(cap.degats))
+			infliger(source, c, float(cap.degats), cap.get("type", ""))
 
 
 # ------------------------------------------------------------------ Mannequins

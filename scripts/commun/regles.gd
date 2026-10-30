@@ -46,16 +46,27 @@ static func deplacer(monde: Monde, pos: Vector2, dir: Vector2, vitesse: float, v
 	return pos
 
 
-## Vrai si le segment touche un obstacle qui arrête les projectiles (arbres, rochers ; pas l'eau).
+## Vrai si le segment touche un obstacle qui arrête les projectiles (arbres, rochers, murs ; pas l'eau).
 static func ligne_bloquee(monde: Monde, de: Vector2, vers: Vector2) -> bool:
+	return premier_obstacle(monde, de, vers) != AUCUN_OBSTACLE
+
+
+const AUCUN_OBSTACLE := Vector2i(-2147483648, -2147483648)
+
+
+## Première case qui arrête le segment (AUCUN_OBSTACLE si rien).
+static func premier_obstacle(monde: Monde, de: Vector2, vers: Vector2) -> Vector2i:
 	var t := float(Config.TAILLE_TUILE)
 	var etapes := int(de.distance_to(vers) / 8.0) + 1
 	for i in etapes + 1:
 		var p := de.lerp(vers, float(i) / etapes)
 		var cx := int(floor(p.x / t))
 		var cy := int(floor(p.y / t))
-		if monde.deco_en(cx, cy) in Monde.DECOS_BLOQUANTES:
-			var boite := Rect2(cx * t, cy * t, t, t).grow(-8.0)
+		var d := monde.deco_en(cx, cy)
+		if d in Monde.DECOS_BLOQUANTES:
+			var boite := Rect2(cx * t, cy * t, t, t)
+			if not d in Monde.DECOS_PLEINES:
+				boite = boite.grow(-8.0)
 			if boite.has_point(p):
-				return true
-	return false
+				return Vector2i(cx, cy)
+	return AUCUN_OBSTACLE

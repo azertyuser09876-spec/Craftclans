@@ -9,7 +9,9 @@ extends RefCounted
 
 enum Sol { EAU, SABLE, HERBE, HERBE_FONCEE, TERRE, PIERRE, NEIGE, BOUE, CENDRE, HERBE_CLAIRE, LAVE }
 enum Deco { AUCUN, ARBRE, SAPIN, ROCHER, BUISSON, FLEURS, FEU, CACTUS, SAPIN_NEIGE, ARBRE_MORT, ROSEAUX, ROCHER_NOIR, OS,
-	FILON_CUIVRE, FILON_FER, FILON_OR, FILON_MITHRIL, CRISTAL, ETABLI, FOURNEAU, ENCLUME, COFFRE }
+	FILON_CUIVRE, FILON_FER, FILON_OR, FILON_MITHRIL, CRISTAL, ETABLI, FOURNEAU, ENCLUME, COFFRE,
+	MUR_BOIS, MUR_PIERRE, MUR_METAL, PORTE_BOIS, PORTE_BOIS_OUVERTE, PORTE_METAL, PORTE_METAL_OUVERTE,
+	SOL_BOIS, SOL_PIERRE, PIEGE }
 enum Biome { PRAIRIE, FORET, DESERT, TOUNDRA, MARAIS, MONTAGNE, LAC, PLAGE, VALLEE, BRULEES }
 
 const TAILLE_MORCEAU := 32
@@ -17,7 +19,14 @@ const CASES := TAILLE_MORCEAU * TAILLE_MORCEAU
 const GENERATEUR := 3 # version du générateur, enregistrée avec chaque morceau (2 : minerais, 3 : coffres)
 const DECOS_BLOQUANTES := [Deco.ARBRE, Deco.SAPIN, Deco.ROCHER, Deco.FEU, Deco.CACTUS, Deco.SAPIN_NEIGE, Deco.ARBRE_MORT,
 	Deco.ROCHER_NOIR, Deco.FILON_CUIVRE, Deco.FILON_FER, Deco.FILON_OR, Deco.FILON_MITHRIL, Deco.CRISTAL,
-	Deco.ETABLI, Deco.FOURNEAU, Deco.ENCLUME, Deco.COFFRE]
+	Deco.ETABLI, Deco.FOURNEAU, Deco.ENCLUME, Deco.COFFRE,
+	Deco.MUR_BOIS, Deco.MUR_PIERRE, Deco.MUR_METAL, Deco.PORTE_BOIS, Deco.PORTE_METAL]
+## Murs et portes fermées : bloquent toute la case (les arbres et rochers, seulement leur centre).
+const DECOS_PLEINES := [Deco.MUR_BOIS, Deco.MUR_PIERRE, Deco.MUR_METAL, Deco.PORTE_BOIS, Deco.PORTE_METAL]
+const COULEURS_CONSTRUCTIONS := {Deco.MUR_BOIS: Color8(150, 104, 60), Deco.MUR_PIERRE: Color8(150, 150, 158),
+	Deco.MUR_METAL: Color8(96, 104, 120), Deco.PORTE_BOIS: Color8(190, 140, 80), Deco.PORTE_BOIS_OUVERTE: Color8(190, 140, 80),
+	Deco.PORTE_METAL: Color8(140, 150, 170), Deco.PORTE_METAL_OUVERTE: Color8(140, 150, 170),
+	Deco.SOL_BOIS: Color8(176, 132, 84), Deco.SOL_PIERRE: Color8(170, 170, 176), Deco.PIEGE: Color8(200, 60, 50)}
 ## Couleur des filons sur les cartes.
 const COULEURS_FILONS := {Deco.FILON_CUIVRE: Color8(206, 118, 60), Deco.FILON_FER: Color8(190, 170, 150),
 	Deco.FILON_OR: Color8(240, 200, 60), Deco.FILON_MITHRIL: Color8(110, 210, 230), Deco.CRISTAL: Color8(200, 130, 255)}
@@ -125,7 +134,7 @@ func collision(pos: Vector2, rayon: float) -> bool:
 			if not case_bloquante(cx, cy):
 				continue
 			var boite := Rect2(cx * t, cy * t, t, t)
-			if not sol_en(cx, cy) in SOLS_BLOQUANTS:
+			if not sol_en(cx, cy) in SOLS_BLOQUANTS and not deco_en(cx, cy) in DECOS_PLEINES:
 				boite = boite.grow(-8.0) # tronc ou rocher : plus petit que la case
 			var proche := pos.clamp(boite.position, boite.end)
 			if proche.distance_squared_to(pos) < rayon * rayon:
@@ -345,6 +354,8 @@ static func image_carte(m: Dictionary) -> Image:
 			c = Color8(255, 220, 90)
 		elif m.deco[i] in [Deco.ETABLI, Deco.FOURNEAU, Deco.ENCLUME]:
 			c = Color8(255, 255, 255)
+		elif COULEURS_CONSTRUCTIONS.has(m.deco[i]):
+			c = COULEURS_CONSTRUCTIONS[m.deco[i]]
 		img.set_pixel(i % TAILLE_MORCEAU, i / TAILLE_MORCEAU, c)
 	return img
 

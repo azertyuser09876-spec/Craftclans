@@ -104,19 +104,8 @@ func sur_poser(s: Dictionary, case: int) -> void:
 	var id: String = s.inventaire[case].id
 	if not Objets.DECOS_STATIONS.has(id):
 		return
-	var c := case_devant(s.pos, s.mvt.regard)
-	var monde: Monde = serveur.monde
-	if monde.deco_en(c.x, c.y) != Monde.Deco.AUCUN or monde.sol_en(c.x, c.y) in Monde.SOLS_BLOQUANTS:
-		_dire(s, "Pas de place ici : mets-toi face à une case libre.")
-		return
-	for autre in serveur.joueurs.values():
-		var boite := Rect2(Vector2(c) * Config.TAILLE_TUILE, Vector2.ONE * Config.TAILLE_TUILE).grow(Config.RAYON_JOUEUR)
-		if boite.has_point(autre.pos):
-			_dire(s, "Quelqu'un est sur cette case.")
-			return
-	Objets.retirer(s.inventaire, id, 1)
-	serveur.recolte.changer_case(c, Objets.DECOS_STATIONS[id])
-	serveur.recolte.envoyer_inventaire(s)
+	# Depuis l'étape 6, une station est une construction (propriétaire, vie).
+	serveur.construction.poser(s, case, VueMonde.centre_case(case_devant(s.pos, s.mvt.regard)), true)
 
 
 static func case_devant(pos: Vector2, regard: Vector2) -> Vector2i:

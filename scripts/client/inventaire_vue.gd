@@ -77,7 +77,7 @@ func _ready() -> void:
 	boite.add_child(ligne)
 	for genre in ["equiper", "retirer", "ameliorer", "poser", "jeter"]:
 		var b := Button.new()
-		b.text = {"equiper": "Équiper", "retirer": "Retirer", "ameliorer": "Améliorer", "poser": "Poser par terre", "jeter": "Jeter"}[genre]
+		b.text = {"equiper": "Équiper", "retirer": "Retirer", "ameliorer": "Améliorer", "poser": "Construire", "jeter": "Jeter"}[genre]
 		b.custom_minimum_size = Vector2(110, 46)
 		b.pressed.connect(_agir.bind(genre))
 		ligne.add_child(b)
@@ -216,5 +216,5 @@ func _maj_detail() -> void:
 		else "%s\n%s" % [Equipement.nom_objet(o), info.description if not info.has("stats") else Equipement.decrire(Equipement.stats_objet(o))]
 	_detail.add_theme_color_override("font_color", Objets.COULEURS_RARETE[int(info.rarete)])
 	_boutons.equiper.visible = info.has("emplacement")
-	_boutons.poser.visible = info.get("station", false)
+	_boutons.poser.visible = info.get("station", false) or info.get("construction", false)
 	_boutons.jeter.visible = true

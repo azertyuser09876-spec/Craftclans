@@ -59,11 +59,13 @@ const DECOS_STATIONS := {"etabli": Monde.Deco.ETABLI, "fourneau": Monde.Deco.FOU
 static func infos(id: String) -> Dictionary:
 	if LISTE.has(id):
 		return LISTE[id]
+	if Batiments.objets().has(id):
+		return Batiments.objets()[id]
 	return Equipement.objets().get(id, {"nom": id, "pile": 1, "rarete": 0, "description": ""})
 
 
 static func existe(id: String) -> bool:
-	return LISTE.has(id) or Equipement.objets().has(id)
+	return LISTE.has(id) or Equipement.objets().has(id) or Batiments.objets().has(id)
 
 
 static func icone(id: String) -> Texture2D:

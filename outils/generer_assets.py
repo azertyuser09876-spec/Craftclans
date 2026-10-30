@@ -457,7 +457,7 @@ def generer_interface():
 
 # ---------------------------------------------------------------- Étape 1 : rôles et combat
 
-ROLES = ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin", "mineur"]
+ROLES = ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin", "mineur", "ingenieur"]
 C = (28, 24, 30, 255)  # contour
 
 
@@ -536,6 +536,19 @@ def dessiner_accessoire(d, ox, oy, direction, etape, role):
         # bretelles
         d.line([(ox + 12, y0 + 13), (ox + 12, y0 + 22)], fill=(90, 70, 50, 255), width=2)
         d.line([(ox + 20, y0 + 13), (ox + 20, y0 + 22)], fill=(90, 70, 50, 255), width=2)
+    elif role == "ingenieur":
+        orange, gilet = (240, 130, 40, 255), (250, 200, 40, 255)
+        d.rounded_rectangle([ox + 8, y0 - 1, ox + 24, y0 + 6], radius=5, fill=orange, outline=C)
+        d.rectangle([ox + 6, y0 + 5, ox + 26, y0 + 6], fill=(210, 100, 30, 255), outline=C)
+        d.line([(ox + 16, y0 - 1), (ox + 16, y0 + 5)], fill=(255, 190, 110, 255))
+        if face or dos:  # gilet de chantier avec bandes réfléchissantes
+            d.line([(ox + 10, y0 + 17), (ox + 22, y0 + 17)], fill=(235, 235, 240, 255), width=2)
+            d.line([(ox + 11, y0 + 13), (ox + 11, y0 + 21)], fill=gilet, width=2)
+            d.line([(ox + 21, y0 + 13), (ox + 21, y0 + 21)], fill=gilet, width=2)
+        else:
+            x = ox + 13 if direction == 1 else ox + 15
+            d.rectangle([x, y0 + 13, x + 4, y0 + 21], fill=gilet)
+            d.line([(x, y0 + 17), (x + 4, y0 + 17)], fill=(235, 235, 240, 255), width=2)
 
 
 def generer_roles():
@@ -592,6 +605,14 @@ def generer_armes():
     d.polygon([(18, 1), (23, 6), (27, 12), (23, 18), (18, 23), (21, 12)], fill=(150, 156, 170, 255), outline=C)
     d.line([(21, 4), (24, 12)], fill=(200, 205, 215, 255))
     armes["mineur"] = img
+    # clé à molette
+    img = Image.new("RGBA", (28, 16)); d = ImageDraw.Draw(img)
+    d.line([(0, 8), (19, 8)], fill=(150, 156, 170, 255), width=4)
+    d.line([(1, 7), (18, 7)], fill=(200, 205, 215, 255))
+    d.ellipse([17, 1, 27, 15], fill=(150, 156, 170, 255), outline=C)
+    d.rectangle([23, 5, 27, 10], fill=(0, 0, 0, 0))
+    d.line([(23, 5), (23, 10)], fill=C)
+    armes["ingenieur"] = img
     for role, img in armes.items():
         img.save(chemin("armes", f"{role}.png"))
 
@@ -668,7 +689,7 @@ def icone_role(role, taille=48):
     img = Image.new("RGBA", (taille, taille)); d = ImageDraw.Draw(img)
     fonds = {"guerrier": (160, 60, 50), "archer": (60, 120, 60), "mage": (100, 60, 160),
              "explorateur": (180, 120, 50), "paladin": (190, 160, 60), "assassin": (60, 56, 76),
-             "mineur": (110, 96, 84)}
+             "mineur": (110, 96, 84), "ingenieur": (200, 110, 40)}
     d.rounded_rectangle([1, 1, taille - 2, taille - 2], radius=10, fill=fonds[role] + (255,), outline=(20, 20, 26, 255), width=2)
     arme = Image.open(chemin("armes", f"{role}.png"))
     arme = arme.resize((arme.width * 2 if arme.width < 24 else arme.width, arme.height * 2 if arme.width < 24 else arme.height), Image.NEAREST)
@@ -934,6 +955,143 @@ def generer_etape5():
     img.save(chemin("ui", "personnage.png"))
 
 
+# ---------------------------------------------------------------- Étape 6 : bases et construction
+
+MATIERES_MUR = {  # face, dessus, joints
+    "bois": ((150, 100, 56), (186, 134, 80), (100, 64, 34)),
+    "pierre": ((140, 140, 148), (178, 178, 186), (96, 96, 104)),
+    "metal": ((96, 104, 122), (150, 160, 180), (60, 66, 80)),
+}
+
+
+def mur(mat):
+    face, dessus, joint = MATIERES_MUR[mat]
+    img = Image.new("RGBA", (32, 48)); d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, 31, 15], fill=dessus + (255,), outline=C)  # dessus du mur
+    d.rectangle([0, 16, 31, 47], fill=face + (255,), outline=C)  # face
+    if mat == "bois":
+        for x in (8, 16, 24):
+            d.line([(x, 17), (x, 46)], fill=joint + (255,))
+        for x in (4, 12, 20, 28):
+            d.point((x, 20), fill=joint + (255,)); d.point((x, 42), fill=joint + (255,))
+        for x in range(2, 31, 4):
+            d.line([(x, 2), (x, 13)], fill=eclaircir(dessus, 0.9) + (255,))
+    elif mat == "pierre":
+        for i, y in enumerate((23, 31, 39)):
+            d.line([(1, y), (30, y)], fill=joint + (255,))
+        for y0, y1, decal in ((17, 22, 0), (24, 30, 8), (32, 38, 0), (40, 46, 8)):
+            for x in range(decal, 32, 16):
+                d.line([(x, y0), (x, y1)], fill=joint + (255,))
+        d.line([(2, 4), (12, 4)], fill=eclaircir(dessus, 1.1) + (255,))
+    else:
+        for x in (1, 30):
+            for y in (19, 31, 44):
+                d.point((x + (2 if x == 1 else -2), y), fill=(220, 225, 235, 255))
+        d.line([(1, 31), (30, 31)], fill=joint + (255,))
+        d.line([(3, 3), (28, 3)], fill=(200, 210, 225, 255))
+    return img
+
+
+def porte(mat, ouverte):
+    face, dessus, joint = MATIERES_MUR[mat]
+    img = Image.new("RGBA", (32, 48)); d = ImageDraw.Draw(img)
+    # cadre (montants et linteau)
+    for x0 in (0, 26):
+        d.rectangle([x0, 0, x0 + 5, 47], fill=face + (255,), outline=C)
+    d.rectangle([0, 0, 31, 15], fill=dessus + (255,), outline=C)
+    if ouverte:
+        d.rectangle([6, 16, 25, 47], fill=(30, 26, 30, 120))
+        d.rectangle([20, 16, 25, 47], fill=eclaircir(face, 1.15) + (255,), outline=C)  # battant de profil
+    else:
+        bat = eclaircir(face, 1.1)
+        d.rectangle([6, 16, 25, 47], fill=bat + (255,), outline=C)
+        for y in (24, 32, 40):
+            d.line([(7, y), (24, y)], fill=joint + (255,))
+        d.ellipse([20, 30, 23, 33], fill=(230, 200, 80, 255), outline=C)
+    return img
+
+
+def generer_etape6():
+    for mat in MATIERES_MUR:
+        mur(mat).save(chemin("decors", f"mur_{mat}.png"))
+    for mat in ("bois", "metal"):
+        porte(mat, False).save(chemin("decors", f"porte_{mat}.png"))
+        porte(mat, True).save(chemin("decors", f"porte_{mat}_ouverte.png"))
+    # sols
+    img = Image.new("RGBA", (32, 32)); d = ImageDraw.Draw(img)
+    for i, y in enumerate(range(0, 32, 8)):
+        c = (176, 128, 80) if i % 2 == 0 else (164, 118, 72)
+        d.rectangle([0, y, 31, y + 7], fill=c + (255,))
+        d.line([(0, y + 7), (31, y + 7)], fill=(120, 82, 46, 255))
+        x = 10 if i % 2 == 0 else 22
+        d.line([(x, y), (x, y + 7)], fill=(120, 82, 46, 255))
+    img.save(chemin("decors", "sol_bois.png"))
+    img = Image.new("RGBA", (32, 32)); d = ImageDraw.Draw(img)
+    for (x0, y0) in ((0, 0), (16, 0), (0, 16), (16, 16)):
+        c = (166, 166, 172) if (x0 + y0) % 32 == 0 else (156, 156, 164)
+        d.rectangle([x0, y0, x0 + 15, y0 + 15], fill=c + (255,), outline=(110, 110, 118, 255))
+        d.point((x0 + 4, y0 + 4), fill=(190, 190, 198, 255))
+    img.save(chemin("decors", "sol_pierre.png"))
+    # piège à pointes
+    img = Image.new("RGBA", (32, 32)); d = ImageDraw.Draw(img)
+    d.rectangle([3, 3, 28, 28], fill=(110, 76, 44, 220), outline=C)
+    for x in (8, 16, 24):
+        for y in (8, 16, 24):
+            d.polygon([(x - 3, y + 3), (x, y - 4), (x + 3, y + 3)], fill=(200, 205, 215, 255), outline=C)
+    img.save(chemin("decors", "piege.png"))
+    # constructions libres
+    img = Image.new("RGBA", (28, 26)); d = ImageDraw.Draw(img)
+    ombre(d, 14, 22, 12, 3)
+    d.rectangle([2, 10, 25, 22], fill=(150, 100, 56, 255), outline=C)
+    d.rectangle([2, 4, 25, 10], fill=(176, 122, 70, 255), outline=C)
+    d.line([(3, 16), (24, 16)], fill=(110, 72, 40, 255))
+    d.rectangle([12, 8, 15, 13], fill=(200, 200, 210, 255), outline=C)
+    img.save(chemin("constructions", "coffre_bois.png"))
+    img = Image.new("RGBA", (28, 28)); d = ImageDraw.Draw(img)
+    ombre(d, 14, 24, 12, 3)
+    d.rectangle([2, 10, 25, 24], fill=(90, 96, 112, 255), outline=C)
+    d.rectangle([2, 3, 25, 10], fill=(120, 128, 148, 255), outline=C)
+    for x in (5, 22):
+        d.line([(x, 4), (x, 23)], fill=(60, 64, 76, 255), width=2)
+    d.rectangle([10, 12, 17, 19], fill=(230, 190, 60, 255), outline=C)
+    d.rectangle([13, 14, 14, 17], fill=C)
+    img.save(chemin("constructions", "coffre_securise.png"))
+    img = Image.new("RGBA", (24, 36)); d = ImageDraw.Draw(img)
+    ombre(d, 12, 33, 11, 3)
+    d.rectangle([2, 4, 21, 33], fill=(130, 86, 48, 255), outline=C)
+    d.rectangle([4, 6, 19, 31], fill=(200, 60, 60, 255))
+    d.rectangle([4, 6, 19, 12], fill=(240, 240, 235, 255), outline=C)
+    d.line([(4, 20), (19, 20)], fill=(160, 40, 40, 255))
+    img.save(chemin("constructions", "lit.png"))
+    img = Image.new("RGBA", (30, 44)); d = ImageDraw.Draw(img)
+    ombre(d, 15, 40, 13, 3)
+    d.polygon([(4, 40), (8, 26), (22, 26), (26, 40)], fill=(140, 140, 150, 255), outline=C)
+    d.rectangle([10, 10, 20, 27], fill=(150, 150, 160, 255), outline=C)
+    d.polygon([(15, 2), (22, 12), (15, 20), (8, 12)], fill=(90, 200, 255, 255), outline=C)
+    d.polygon([(15, 5), (19, 11), (15, 15)], fill=(200, 245, 255, 255))
+    img.save(chemin("constructions", "coeur_base.png"))
+    img = Image.new("RGBA", (30, 38)); d = ImageDraw.Draw(img)
+    ombre(d, 15, 35, 12, 3)
+    d.polygon([(5, 35), (10, 22), (20, 22), (25, 35)], fill=(110, 76, 44, 255), outline=C)
+    d.rectangle([7, 12, 23, 23], fill=(176, 118, 64, 255), outline=C)
+    d.line([(2, 14), (28, 14)], fill=(110, 70, 40, 255), width=3)
+    d.arc([1, 6, 29, 22], 200, 340, fill=(150, 100, 50, 255), width=2)
+    d.line([(15, 4), (15, 20)], fill=(200, 205, 215, 255), width=2)
+    d.polygon([(13, 5), (15, 1), (17, 5)], fill=(220, 224, 236, 255), outline=C)
+    img.save(chemin("constructions", "tourelle.png"))
+    # icônes d'objets (24x24) : réduction des images ci-dessus
+    sources = {"mur_bois": ("decors", "mur_bois"), "mur_pierre": ("decors", "mur_pierre"), "mur_metal": ("decors", "mur_metal"),
+               "porte_bois": ("decors", "porte_bois"), "porte_metal": ("decors", "porte_metal"),
+               "sol_bois": ("decors", "sol_bois"), "sol_pierre": ("decors", "sol_pierre"), "piege": ("decors", "piege"),
+               "coffre_bois": ("constructions", "coffre_bois"), "coffre_securise": ("constructions", "coffre_securise"),
+               "lit": ("constructions", "lit"), "coeur_base": ("constructions", "coeur_base"), "tourelle": ("constructions", "tourelle")}
+    for nom, (dossier, fichier) in sources.items():
+        src = Image.open(chemin(dossier, f"{fichier}.png"))
+        src.thumbnail((24, 24), Image.NEAREST)
+        img = Image.new("RGBA", (24, 24)); img.paste(src, ((24 - src.width) // 2, (24 - src.height) // 2), src)
+        img.save(chemin("objets", f"{nom}.png"))
+
+
 if __name__ == "__main__":
     generer_sols()
     generer_arbre()
@@ -953,4 +1111,5 @@ if __name__ == "__main__":
     generer_objets()
     generer_etape4()
     generer_etape5()
+    generer_etape6()
     print("Assets générés dans", os.path.abspath(os.path.join(RACINE, "assets")))

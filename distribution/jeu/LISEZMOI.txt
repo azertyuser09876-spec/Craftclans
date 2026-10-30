@@ -81,6 +81,22 @@ Niveaux et compétences
   Changer de rôle rend les points de compétence (le niveau reste). « Tout oublier » rend tous
   les points contre des herbes médicinales.
 
+Bases et construction
+  Les constructions se fabriquent (touche C, onglet Constructions) puis se posent depuis
+  l'inventaire avec « Construire » : un aperçu suit la souris (vert : possible), clic gauche
+  pour poser, clic droit ou Échap pour finir. Sur téléphone : boutons Poser, Grille / libre, Fin.
+  Murs, portes, sols et pièges vont sur la grille. Coffres, lits, cœurs de base et tourelles
+  se posent sur la grille ou librement (touche G).
+  - Les portes s'ouvrent toutes seules devant toi et ton équipe, et restent fermées aux autres.
+  - Coffre : n'importe qui peut l'ouvrir. Coffre sécurisé : seulement ton équipe, et très solide.
+  - Cœur de base + lit à moins de 10 cases : ton équipe réapparaît là après une mort.
+  - Tourelles et pièges défendent la base, même quand tu n'es pas connecté.
+  Tout peut être détruit : les lames abîment surtout le bois, les pioches et marteaux la pierre,
+  les explosions (potions) tout, les flèches presque rien. Un coffre détruit laisse tomber son contenu.
+  F devant une de tes constructions : renforcer (moins de dégâts, plus de vie), réparer, démonter.
+  Rôle ingénieur : constructions plus solides, tourelles plus fortes, sa clé répare, et il pose
+  une tourelle portable.
+
 Équipes
   /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,
   et les soins du mage ou du paladin ne touchent que l'équipe. /equipe quitter pour jouer seul.

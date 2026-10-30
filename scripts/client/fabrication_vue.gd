@@ -5,7 +5,7 @@ extends PanelContainer
 
 signal fabriquer(id: String)
 
-const CATEGORIES := [["station", "Stations"], ["lingot", "Lingots (fourneau)"], ["arme", "Armes"], ["outil", "Outils"],
+const CATEGORIES := [["station", "Stations"], ["construction", "Constructions"], ["lingot", "Lingots (fourneau)"], ["arme", "Armes"], ["outil", "Outils"],
 	["tete", "Armures : tête"], ["torse", "Armures : torse"], ["jambes", "Armures : jambes"], ["pieds", "Armures : pieds"]]
 
 var inventaire: Array = []

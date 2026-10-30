@@ -15,7 +15,7 @@ const POINTS_COMPETENCE_PAR_NIVEAU := 1
 const COUT_SECONDAIRE := 2
 const CARAC_MAX := 40
 const PALIERS := [0, 3, 7] # rangs déjà pris dans l'arbre pour débloquer chaque palier
-const PLAFONDS := {"recharge": 0.4, "esquive": 0.5, "vol_vie": 0.2}
+const PLAFONDS := {"recharge": 0.4, "esquive": 0.5, "vol_vie": 0.2, "batiment": 1.5, "tourelle": 1.5}
 
 ## Points d'amélioration classique : bonus par point.
 const CARACS := {
@@ -110,11 +110,21 @@ const ARBRES := {
 		"ruee_frequente": {"nom": "Ruée fréquente", "palier": 2, "rangs": 2, "cap": {"competence.recharge": -0.15}},
 		"maitre_mineur": {"nom": "Maître mineur", "palier": 2, "rangs": 1, "stats": {"recolte": 0.2, "vie": 20}, "si": "ensemble"},
 	},
+	"ingenieur": {
+		"cle_lourde": {"nom": "Clé lourde", "palier": 0, "rangs": 3, "cap": {"attaque.degats": 0.08}},
+		"bricoleur": {"nom": "Bricoleur", "palier": 0, "rangs": 2, "cap": {"attaque.repare": 0.25}},
+		"batisseur": {"nom": "Bâtisseur", "palier": 0, "rangs": 3, "stats": {"batiment": 0.1}},
+		"tourelle_solide": {"nom": "Tourelle endurante", "palier": 1, "rangs": 2, "cap": {"competence.duree": 0.25}},
+		"canons": {"nom": "Canons rayés", "palier": 1, "rangs": 2, "stats": {"tourelle": 0.15}},
+		"casque": {"nom": "Casque de chantier", "palier": 1, "rangs": 2, "stats": {"armure": 3, "vie": 8}},
+		"deploiement": {"nom": "Déploiement rapide", "palier": 2, "rangs": 2, "cap": {"competence.recharge": -0.15, "competence.degats": 0.15}},
+		"maitre_ingenieur": {"nom": "Maître ingénieur", "palier": 2, "rangs": 1, "stats": {"batiment": 0.2, "tourelle": 0.2}, "si": "outil"},
+	},
 }
 
 const NOMS_PARAMETRES := {"degats": "dégâts", "degats_max": "dégâts max", "portee": "portée", "portee_max": "portée max",
 	"rayon": "zone", "recharge": "recharge", "duree": "durée", "soin": "soin", "bonus": "bonus", "dos": "bonus dans le dos",
-	"vagues": "vagues", "charge": "temps de charge", "vitesse_proj_max": "vitesse de la flèche"}
+	"vagues": "vagues", "charge": "temps de charge", "vitesse_proj_max": "vitesse de la flèche", "repare": "réparation"}
 
 
 # ------------------------------------------------------------------ Niveaux
@@ -327,6 +337,8 @@ static func decrire_stats(stats: Dictionary) -> String:
 	if stats.get("esquive", 0.0) > 0.0: parts.append("Recharge de l'esquive -%d %%" % int(round(stats.esquive * 100)))
 	if stats.get("vol_vie", 0.0) > 0.0: parts.append("Vol de vie %d %%" % int(round(stats.vol_vie * 100)))
 	if stats.get("regen", 0.0) > 0.0: parts.append("Régénération %s vie/s hors combat" % str(snappedf(stats.regen, 0.1)))
+	if stats.get("batiment", 0.0) > 0.0: parts.append("Vie des constructions posées +%d %%" % int(round(stats.batiment * 100)))
+	if stats.get("tourelle", 0.0) > 0.0: parts.append("Dégâts des tourelles posées +%d %%" % int(round(stats.tourelle * 100)))
 	return ", ".join(PackedStringArray(parts)) if not parts.is_empty() else "Aucun bonus"
 
 

@@ -18,6 +18,7 @@ var combat: Combat
 var recolte: Recolte
 var atelier: Atelier
 var experience: Experience
+var construction: Construction
 var actif := false
 var demarre_le := 0
 var derniere_sauvegarde := ""
@@ -57,6 +58,10 @@ func _ready() -> void:
 	recolte.charger(donnees)
 	atelier = Atelier.new(self)
 	experience = Experience.new(self)
+	construction = Construction.new(self)
+	construction.charger(donnees)
+	for cle in monde.morceaux:
+		construction.adopter(cle, monde.morceaux[cle]) # morceaux déjà chargés (mannequins)
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
@@ -125,6 +130,8 @@ func _creer_monde() -> void:
 			monde.ajouter_coffres(cle, m) # morceau d'avant les coffres
 			m["generateur"] = Monde.GENERATEUR
 			sauvegarde.enregistrer_morceau(cle, m)
+		if not m.is_empty() and construction:
+			construction.adopter(cle, m)
 		return m
 	monde.sur_creation = func(cle: Vector2i, m: Dictionary):
 		sauvegarde.enregistrer_morceau(cle, m)
@@ -192,6 +199,7 @@ func _physics_process(delta: float) -> void:
 	combat.tick(delta)
 	recolte.tick(delta)
 	experience.tick(delta)
+	construction.tick(delta)
 	var heure: float = donnees.heure + delta * 24.0 / Config.DUREE_JOURNEE * float(donnees.reglages.vitesse_temps)
 	donnees.heure = fmod(heure, 24.0)
 	_accu_etat += delta
@@ -231,12 +239,18 @@ func _envoyer_etat() -> void:
 		Reseau.s_etat.rpc_id(id, etat)
 
 
+## Sauvegarde dans les secondes qui viennent (après une construction posée ou détruite).
+func sauver_bientot() -> void:
+	_accu_sauvegarde = maxf(_accu_sauvegarde, float(config.sauvegarde_auto_secondes) - 3.0)
+
+
 func sauver() -> void:
 	if donnees.is_empty():
 		return
 	for s in joueurs.values():
 		_memoriser(s)
 	recolte.enregistrer(donnees)
+	construction.enregistrer(donnees)
 	if sauvegarde.enregistrer(donnees):
 		derniere_sauvegarde = Time.get_time_string_from_system()
 	else:
@@ -353,6 +367,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	envoyer_reglages(id)
 	recolte.accueillir(s)
 	Reseau.s_progression.rpc_id(id, Experience.resume(s))
+	construction.accueillir(s)
 	for autre_id in joueurs:
 		if autre_id != id:
 			Reseau.s_joueur.rpc_id(autre_id, id, _infos_publiques(s))
@@ -424,6 +439,19 @@ func sur_atelier(id: int, genre: String, valeur: String) -> void:
 		"retirer": atelier.sur_retirer(s, valeur)
 		"poser": atelier.sur_poser(s, int(valeur))
 		"ameliorer": atelier.sur_ameliorer(s, valeur)
+
+
+## Étape 6 : poser une construction (case de l'inventaire, position, sur la grille ou non).
+func sur_construire(id: int, case: int, pos: Vector2, grille: bool) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		construction.poser(s, case, pos, grille)
+
+
+func sur_construction(id: int, genre: String, cid: int, valeur: int) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		construction.sur_action(s, genre, cid, valeur)
 
 
 ## Étape 5 : caractéristiques, compétences, oubli.
@@ -589,6 +617,7 @@ func reinitialiser_monde() -> void:
 	donnees.bannis = bannis
 	_creer_monde()
 	recolte.charger(donnees)
+	construction.charger(donnees)
 	combat.retirer_mannequins()
 	combat.mannequins_par_defaut()
 	sauver()

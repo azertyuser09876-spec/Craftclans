@@ -111,6 +111,11 @@ static func _construire() -> void:
 	_recette("lingot_fer", 1, {"fer": 2, "bois": 1}, "fourneau", "lingot")
 	_recette("lingot_or", 1, {"or": 2, "bois": 1}, "fourneau", "lingot")
 	_recette("lingot_mithril", 1, {"mithril": 2, "bois": 2}, "fourneau", "lingot")
+	# Étape 6 : constructions
+	for id in Batiments.LISTE:
+		var b: Dictionary = Batiments.LISTE[id]
+		if b.has("ingredients"):
+			_recette(id, 1, b.ingredients, b.station, "construction")
 
 
 static func _ajouter_equipement(id: String, emplacement: String, mat: String, m: Dictionary, stats: Dictionary) -> void:

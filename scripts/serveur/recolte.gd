@@ -90,6 +90,11 @@ func sur_recolter(s: Dictionary, actif: bool, c: Vector2i) -> void:
 	if not _a_portee(s, c):
 		_arreter(s)
 		return
+	var proprio: String = serveur.construction.proprio_case(c)
+	if proprio != "" and not serveur.construction.allie(s, proprio):
+		Reseau.s_message.rpc_id(s.id, "Appartient à %s : détruis-le pour t'en débarrasser." % proprio, "systeme")
+		_arreter(s)
+		return
 	s.recolte = {"case": c, "progres": 0.0}
 
 
@@ -135,6 +140,7 @@ func _avancer_recolte(s: Dictionary, delta: float) -> void:
 	# Décor épuisé : il disparaît et repoussera plus tard.
 	_usure.erase(c)
 	_changer_case(c, Monde.Deco.AUCUN)
+	serveur.construction.case_videe(c)
 	if int(r.repousse) > 0:
 		serveur.donnees.repousses.append([c.x, c.y, deco, float(r.repousse) * 60.0])
 	_arreter(s)
@@ -198,6 +204,11 @@ func _annoncer_sac(sac: Dictionary) -> void:
 	var infos := _infos_sac(sac)
 	for id in serveur.joueurs:
 		Reseau.s_sac.rpc_id(id, infos)
+
+
+## Sac posé par une autre partie du serveur (coffre détruit…).
+func deposer_sac(pos: Vector2, objets: Array, genre: String, nom: String) -> void:
+	_nouveau_sac(pos, objets, genre, nom)
 
 
 func _retirer_sac(id: int) -> void:

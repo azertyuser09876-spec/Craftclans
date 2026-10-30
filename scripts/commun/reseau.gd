@@ -24,6 +24,10 @@ signal sacs_recus(liste: Array)
 signal sac_recu(infos: Dictionary)
 signal sac_retire(id: int)
 signal progression_recue(p: Dictionary)
+signal constructions_recues(liste: Array)
+signal construction_recue(infos: Dictionary)
+signal construction_retiree(id: int)
+signal contenu_recu(id: int, contenu: Array)
 
 var serveur: Node = null # renseigné côté serveur
 var raison_refus := ""
@@ -210,6 +214,18 @@ func c_atelier(genre: String, valeur: String) -> void:
 	if serveur: serveur.sur_atelier(multiplayer.get_remote_sender_id(), genre, valeur)
 
 
+## Étape 6 : poser l'objet de la case `case` de l'inventaire.
+@rpc("any_peer", "call_remote", "reliable")
+func c_construire(case: int, pos: Vector2, grille: bool) -> void:
+	if serveur: serveur.sur_construire(multiplayer.get_remote_sender_id(), case, pos, grille)
+
+
+## Étape 6 : ouvrir, fermer, prendre, deposer, renforcer, reparer, demonter.
+@rpc("any_peer", "call_remote", "reliable")
+func c_construction(genre: String, id: int, valeur: int) -> void:
+	if serveur: serveur.sur_construction(multiplayer.get_remote_sender_id(), genre, id, valeur)
+
+
 ## Étape 5 : caractéristique (carac), rang de compétence (noeud « arbre:noeud ») ou oubli.
 @rpc("any_peer", "call_remote", "reliable")
 func c_progression(genre: String, valeur: String) -> void:
@@ -282,6 +298,26 @@ func s_inventaire(inv: Array, equipement: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_progression(p: Dictionary) -> void:
 	progression_recue.emit(p)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func s_constructions(liste: Array) -> void:
+	constructions_recues.emit(liste)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func s_construction(infos: Dictionary) -> void:
+	construction_recue.emit(infos)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func s_construction_retiree(id: int) -> void:
+	construction_retiree.emit(id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_contenu(id: int, contenu: Array) -> void:
+	contenu_recu.emit(id, contenu)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
