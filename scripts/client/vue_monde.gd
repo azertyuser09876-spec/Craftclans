@@ -21,6 +21,10 @@ const TEX_DECOS := {
 	Monde.Deco.FILON_OR: preload("res://assets/decors/filon_or.png"),
 	Monde.Deco.FILON_MITHRIL: preload("res://assets/decors/filon_mithril.png"),
 	Monde.Deco.CRISTAL: preload("res://assets/decors/cristal.png"),
+	Monde.Deco.ETABLI: preload("res://assets/decors/etabli.png"),
+	Monde.Deco.FOURNEAU: preload("res://assets/decors/fourneau.png"),
+	Monde.Deco.ENCLUME: preload("res://assets/decors/enclume.png"),
+	Monde.Deco.COFFRE: preload("res://assets/decors/coffre.png"),
 }
 const DECOS_AU_SOL := [Monde.Deco.FLEURS, Monde.Deco.OS, Monde.Deco.ROSEAUX]
 const DECOS_HAUTES := [Monde.Deco.ARBRE, Monde.Deco.SAPIN, Monde.Deco.SAPIN_NEIGE, Monde.Deco.ARBRE_MORT]

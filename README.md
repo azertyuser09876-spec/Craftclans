@@ -13,7 +13,8 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 | 2.1 | Correctif réseau : IPv6, essai IPv6 puis IPv4, adresses à donner dans le panneau, pare-feu | ✅ v0.2.1 |
 | 2.2 | Test de connexion et réparation du pare-feu dans le panneau, minicarte qui ne déborde plus | ✅ v0.2.2 |
 | 3 | Ressources : récolte, minerais selon le danger, rôle Mineur, inventaire, mort (tout tombe sur le corps, pillable) | ✅ v0.3.0 |
-| 4 | Craft et équipement | à venir |
+| 4 | Craft et équipement : établi, fourneau, enclume, lingots, plans dans des coffres, armures par pièce avec bonus d'ensemble, armes, outils, amélioration +1 à +3 | ✅ v0.4.0 |
+| 5 | Niveaux et arbres de compétences | à venir |
 | … | voir la feuille de route du document de conception | |
 
 ## Jouer
@@ -35,6 +36,7 @@ scripts/commun/   partagé par le jeu et le serveur
   regles.gd         règles de déplacement (appliquées par le serveur, prédites par le jeu)
   roles.gd          les rôles et leurs capacités (vie, dégâts, portées, recharges)
   objets.gd         objets, ressources données par chaque décor, règles d'inventaire
+  equipement.gd     équipement (généré à partir des matériaux), recettes, bonus, amélioration
   donnees_boss.gd   liste des boss mondiaux
 scripts/serveur/  serveur dédié
   serveur.gd        logique du serveur (il fait autorité sur tout)
@@ -42,10 +44,11 @@ scripts/serveur/  serveur dédié
   combat.gd         vie, dégâts, projectiles, zones, effets, mort et réapparition
   commandes.gd      commandes admin, triches, boss (console et chat /aide)
   recolte.gd        récolte, repousse des décors, inventaires, sacs au sol et corps
+  atelier.gd        fabriquer, poser les stations, s'équiper, améliorer
   panneau_admin.gd  fenêtre de gestion du serveur
 scripts/client/   le jeu
   menu.gd, jeu.gd, vue_monde.gd, carte_vue.gd (minicarte et grande carte), joueur_visuel.gd, joystick.gd, theme_jeu.gd,
-  effets.gd, barre_combat.gd, mannequin_visuel.gd, inventaire_vue.gd
+  effets.gd, barre_combat.gd, mannequin_visuel.gd, inventaire_vue.gd, fabrication_vue.gd
 assets/           images (générées par outils/generer_assets.py)
 distribution/     fichiers ajoutés aux zips (lisez-moi, .bat du serveur)
 outils/           générateur d'assets, script de version

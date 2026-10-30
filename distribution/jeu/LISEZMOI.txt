@@ -28,7 +28,8 @@ Commandes sur PC
   R : changer de rôle (pas en plein combat)
   M : grande carte (ou clic sur la minicarte)
   F (maintenir) : récolter l'arbre, le rocher ou le filon le plus proche ; F : ramasser un sac ou un corps
-  I ou Tab : inventaire (pour jeter un objet au sol)
+  I ou Tab : inventaire et équipement (équiper, améliorer, poser une station, jeter)
+  C : fabriquer
   Entrée : écrire dans le chat. /aide affiche les commandes.
   F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
   Échap : menu
@@ -54,6 +55,18 @@ Ressources et mort
   Reviens le chercher dans les 30 minutes... avant que quelqu'un d'autre ne le pille !
   Sur téléphone : le bouton pioche apparaît quand tu es à côté de quelque chose,
   le bouton sac en haut ouvre l'inventaire.
+
+Fabriquer et s'équiper
+  1. Fabrique un établi (8 bois, touche C), puis pose-le depuis l'inventaire (face à une case libre).
+  2. À l'établi : fourneau, enclume, outils de pierre, lame de bois, armure en tissu.
+  3. Au fourneau : les minerais deviennent des lingots. À l'enclume : armures, lames et pioches en métal.
+  4. Fer, or, mithril, obsidienne et cristal demandent un plan. Les plans sont dans les coffres
+     anciens, cachés un peu partout : plus le danger est grand, meilleur est le plan.
+  Une armure a 4 pièces (tête, torse, jambes, pieds). Chaque pièce donne son bonus ;
+  les 4 pièces du même matériau donnent en plus un bonus d'ensemble.
+  À l'enclume (ou l'établi), un objet porté peut être amélioré jusqu'à +3 en le mélangeant
+  avec des ressources. Tout est fixe : rien n'est tiré au hasard.
+  Démonter une station (F) la redonne. À ta mort, l'équipement tombe aussi sur ton corps.
 
 Équipes
   /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,

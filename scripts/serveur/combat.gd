@@ -38,10 +38,21 @@ func preparer_session(s: Dictionary, fiche: Dictionary) -> void:
 	s.effets = {}
 	s.dernier_combat = -100.0
 	s.dernier_vainqueur = ""
+	s.stats = Equipement.stats({})
+
+
+## Bonus de l'équipement : vie, armure, dégâts, vitesse, récolte.
+func recalculer(s: Dictionary) -> void:
+	var avant: int = s.vie_max
+	s.stats = Equipement.stats(s.get("equipement", {}))
+	s.vie_max = int(Roles.donnees(s.role).vie) + int(round(s.stats.vie))
+	if not s.mort:
+		s.vie = clampi(s.vie + s.vie_max - avant, 1, s.vie_max)
+	serveur.envoyer_reglages(s.id)
 
 
 func vitesse(s: Dictionary) -> float:
-	var v := Config.VITESSE_JOUEUR * float(Roles.donnees(s.role).vitesse) * float(s.vitesse)
+	var v: float = Config.VITESSE_JOUEUR * float(Roles.donnees(s.role).vitesse) * float(s.vitesse) * (1.0 + s.stats.vitesse)
 	if _effet(s, "sprint") or _effet(s, "ruee"):
 		v *= 1.0 + float(Roles.donnees(s.role).competence.get("bonus", 0.0))
 	return v
@@ -83,7 +94,7 @@ func changer_role(s: Dictionary, role: String, force := false) -> String:
 	if not force and temps - s.dernier_combat < HORS_COMBAT:
 		return "Impossible pendant un combat. Attends quelques secondes."
 	s.role = role
-	s.vie_max = int(Roles.donnees(role).vie)
+	s.vie_max = int(Roles.donnees(role).vie) + int(round(s.stats.vie))
 	s.vie = s.vie_max
 	s.effets = {}
 	s.pret_attaque = 0.0
@@ -190,6 +201,7 @@ func _cibles_dans_cercle(centre: Vector2, rayon: float) -> Array:
 func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 	if c.genre == "m":
 		var m: Dictionary = c.m
+		montant *= 1.0 + source.stats.degats
 		m.vie = maxi(0, m.vie - int(round(montant)))
 		m.dernier = temps
 		if m.vie == 0:
@@ -206,6 +218,7 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 		montant *= 1.0 - float(Roles.LISTE.paladin.competence.reduction)
 	if _effet(source, "ombre"):
 		montant *= 1.0 + float(Roles.LISTE.assassin.competence.bonus)
+	montant *= (1.0 + source.stats.degats) * 100.0 / (100.0 + s.stats.armure)
 	_fin_ombre(source)
 	var n := maxi(1, int(round(montant)))
 	s.vie = maxi(0, s.vie - n)

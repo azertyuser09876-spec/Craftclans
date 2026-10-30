@@ -9,14 +9,15 @@ extends RefCounted
 
 enum Sol { EAU, SABLE, HERBE, HERBE_FONCEE, TERRE, PIERRE, NEIGE, BOUE, CENDRE, HERBE_CLAIRE, LAVE }
 enum Deco { AUCUN, ARBRE, SAPIN, ROCHER, BUISSON, FLEURS, FEU, CACTUS, SAPIN_NEIGE, ARBRE_MORT, ROSEAUX, ROCHER_NOIR, OS,
-	FILON_CUIVRE, FILON_FER, FILON_OR, FILON_MITHRIL, CRISTAL }
+	FILON_CUIVRE, FILON_FER, FILON_OR, FILON_MITHRIL, CRISTAL, ETABLI, FOURNEAU, ENCLUME, COFFRE }
 enum Biome { PRAIRIE, FORET, DESERT, TOUNDRA, MARAIS, MONTAGNE, LAC, PLAGE, VALLEE, BRULEES }
 
 const TAILLE_MORCEAU := 32
 const CASES := TAILLE_MORCEAU * TAILLE_MORCEAU
-const GENERATEUR := 2 # version du générateur, enregistrée avec chaque morceau (2 : minerais)
+const GENERATEUR := 3 # version du générateur, enregistrée avec chaque morceau (2 : minerais, 3 : coffres)
 const DECOS_BLOQUANTES := [Deco.ARBRE, Deco.SAPIN, Deco.ROCHER, Deco.FEU, Deco.CACTUS, Deco.SAPIN_NEIGE, Deco.ARBRE_MORT,
-	Deco.ROCHER_NOIR, Deco.FILON_CUIVRE, Deco.FILON_FER, Deco.FILON_OR, Deco.FILON_MITHRIL, Deco.CRISTAL]
+	Deco.ROCHER_NOIR, Deco.FILON_CUIVRE, Deco.FILON_FER, Deco.FILON_OR, Deco.FILON_MITHRIL, Deco.CRISTAL,
+	Deco.ETABLI, Deco.FOURNEAU, Deco.ENCLUME, Deco.COFFRE]
 ## Couleur des filons sur les cartes.
 const COULEURS_FILONS := {Deco.FILON_CUIVRE: Color8(206, 118, 60), Deco.FILON_FER: Color8(190, 170, 150),
 	Deco.FILON_OR: Color8(240, 200, 60), Deco.FILON_MITHRIL: Color8(110, 210, 230), Deco.CRISTAL: Color8(200, 130, 255)}
@@ -209,7 +210,21 @@ func generer_morceau(cle: Vector2i) -> Dictionary:
 					deco[i] = Deco.AUCUN
 				if cx == 0 and cy == 0:
 					deco[i] = Deco.FEU
-	return {"sol": sol, "deco": deco, "biome": biome, "generateur": GENERATEUR}
+	var m := {"sol": sol, "deco": deco, "biome": biome, "generateur": GENERATEUR}
+	ajouter_coffres(cle, m)
+	return m
+
+
+## Coffres anciens (ils contiennent un plan) : rares, jamais près du départ.
+## Sert aussi à mettre à jour un morceau sauvegardé avant leur arrivée (sans toucher aux cases occupées).
+func ajouter_coffres(cle: Vector2i, m: Dictionary) -> void:
+	for i in CASES:
+		var cx := cle.x * TAILLE_MORCEAU + i % TAILLE_MORCEAU
+		var cy := cle.y * TAILLE_MORCEAU + i / TAILLE_MORCEAU
+		if m.deco[i] != Deco.AUCUN or m.sol[i] in SOLS_BLOQUANTS or Vector2(cx, cy).length() < 30.0:
+			continue
+		if posmod(hash(Vector3i(cx, cy, graine + 17)), 100000) < 60: # 0,06 % des cases libres
+			m.deco[i] = Deco.COFFRE
 
 
 ## Calcule une case : [sol, deco, biome]. `r` est un nombre au hasard (0 à 1) propre à la case.
@@ -326,6 +341,10 @@ static func image_carte(m: Dictionary) -> Image:
 			c = c.darkened(0.35)
 		elif COULEURS_FILONS.has(m.deco[i]):
 			c = COULEURS_FILONS[m.deco[i]]
+		elif m.deco[i] == Deco.COFFRE:
+			c = Color8(255, 220, 90)
+		elif m.deco[i] in [Deco.ETABLI, Deco.FOURNEAU, Deco.ENCLUME]:
+			c = Color8(255, 255, 255)
 		img.set_pixel(i % TAILLE_MORCEAU, i / TAILLE_MORCEAU, c)
 	return img
 

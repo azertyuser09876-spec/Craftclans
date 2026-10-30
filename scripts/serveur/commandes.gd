@@ -186,15 +186,21 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 			var lignes := ["Objets :"]
 			for id in Objets.LISTE:
 				lignes.append("  %s : %s" % [id, Objets.LISTE[id].nom])
+			for id in Equipement.AUTRES:
+				lignes.append("  %s : %s" % [id, Equipement.AUTRES[id].nom])
+			lignes.append("Équipement : tete_, torse_, jambes_, pieds_ + %s ;" % _joindre(Equipement.MATERIAUX.keys(), ", "))
+			lignes.append("  arme_ + %s ; outil_ + %s" % [_joindre(Equipement.ARMES.keys(), ", "), _joindre(Equipement.OUTILS.keys(), ", ")])
 			return _joindre(lignes, "\n")
 		"donner":
 			var cible_d := _cible(args, auteur)
 			if cible_d.s.is_empty() or cible_d.args.is_empty():
 				return "Utilisation : donner [joueur] <objet> [nombre]"
 			var id_objet: String = cible_d.args[0].to_lower()
-			if not Objets.LISTE.has(id_objet):
+			if not Objets.existe(id_objet):
 				return "Objet inconnu : %s. Tape objets." % id_objet
 			var n := 1 if cible_d.args.size() < 2 else clampi(int(cible_d.args[1]), 1, 999)
+			if int(Objets.infos(id_objet).pile) == 1:
+				n = mini(n, 10)
 			var donnes: int = serveur.recolte.donner(cible_d.s, id_objet, n)
 			return "%d %s donné(s) à %s." % [donnes, Objets.infos(id_objet).nom, cible_d.s.nom]
 		"vider":

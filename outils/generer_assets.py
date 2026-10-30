@@ -794,6 +794,131 @@ def generer_objets():
     img.save(chemin("ui", "recolter.png"))
 
 
+# ---------------------------------------------------------------- Étape 4 : craft et équipement
+
+MATERIAUX_EQUIP = {  # même liste que Equipement.MATERIAUX / ARMES / OUTILS
+    "tissu": (200, 190, 150), "cuivre": (206, 118, 60), "fer": (176, 176, 186), "or": (236, 190, 50),
+    "mithril": (110, 200, 220), "obsidienne": (80, 50, 110), "cristal": (200, 130, 255),
+    "bois": (150, 100, 56), "pierre": (140, 140, 150),
+}
+ARMES_EQUIP = ["bois", "cuivre", "fer", "or", "mithril", "obsidienne", "cristal"]
+OUTILS_EQUIP = ["pierre", "cuivre", "fer", "mithril"]
+
+
+def teinte(c, f):
+    return tuple(max(0, min(255, int(v * f))) for v in c) + (255,)
+
+
+def icone_piece(piece, coul):
+    img = Image.new("RGBA", (24, 24)); d = ImageDraw.Draw(img)
+    clair, fonce = teinte(coul, 1.25), teinte(coul, 0.7)
+    base = coul + (255,)
+    if piece == "tete":
+        d.chord([4, 4, 20, 22], 180, 360, fill=base, outline=C)
+        d.rectangle([4, 13, 20, 15], fill=fonce, outline=C)
+        d.line([(8, 7), (11, 5)], fill=clair)
+    elif piece == "torse":
+        d.polygon([(5, 4), (9, 3), (12, 6), (15, 3), (19, 4), (21, 10), (18, 11), (18, 21), (6, 21), (6, 11), (3, 10)], fill=base, outline=C)
+        d.line([(12, 7), (12, 20)], fill=fonce)
+        d.line([(8, 8), (9, 16)], fill=clair)
+    elif piece == "jambes":
+        d.polygon([(6, 3), (18, 3), (19, 21), (14, 21), (12, 10), (10, 21), (5, 21)], fill=base, outline=C)
+        d.rectangle([6, 3, 18, 6], fill=fonce, outline=C)
+    elif piece == "pieds":
+        for x in (3, 13):
+            d.polygon([(x, 6), (x + 6, 6), (x + 6, 16), (x + 9, 17), (x + 9, 21), (x, 21)], fill=base, outline=C)
+            d.line([(x + 1, 8), (x + 1, 15)], fill=clair)
+    elif piece == "arme":
+        d.line([(4, 20), (8, 16)], fill=(110, 70, 40, 255), width=3)
+        d.line([(6, 14), (10, 18)], fill=fonce, width=2)
+        d.polygon([(8, 14), (19, 3), (21, 3), (21, 5), (10, 16)], fill=base, outline=C)
+        d.line([(10, 14), (19, 5)], fill=clair)
+    elif piece == "outil":
+        d.line([(5, 21), (15, 7)], fill=(110, 70, 40, 255), width=3)
+        d.polygon([(6, 6), (12, 3), (19, 4), (22, 9), (17, 7), (11, 6)], fill=base, outline=C)
+        d.line([(9, 5), (17, 5)], fill=clair)
+    return img
+
+
+def generer_etape4():
+    for mat, coul in MATERIAUX_EQUIP.items():
+        if mat in ("bois", "pierre"):
+            continue
+        for piece in ("tete", "torse", "jambes", "pieds"):
+            icone_piece(piece, coul).save(chemin("objets", f"{piece}_{mat}.png"))
+    for mat in ARMES_EQUIP:
+        icone_piece("arme", MATERIAUX_EQUIP[mat]).save(chemin("objets", f"arme_{mat}.png"))
+    for mat in OUTILS_EQUIP:
+        icone_piece("outil", MATERIAUX_EQUIP[mat]).save(chemin("objets", f"outil_{mat}.png"))
+    # lingots
+    for mat in ("cuivre", "fer", "or", "mithril"):
+        coul = MATERIAUX_EQUIP[mat]
+        img = Image.new("RGBA", (24, 24)); d = ImageDraw.Draw(img)
+        for i, y in enumerate((13, 7)):
+            d.polygon([(3 + i * 3, y + 7), (6 + i * 3, y), (18 + i * 3 - 3, y), (21 - i * 0, y + 7)], fill=coul + (255,), outline=C)
+            d.line([(7 + i * 3, y + 2), (16 + i * 2, y + 2)], fill=teinte(coul, 1.3))
+        img.save(chemin("objets", f"lingot_{mat}.png"))
+    # plan (parchemin)
+    img = Image.new("RGBA", (24, 24)); d = ImageDraw.Draw(img)
+    d.rectangle([5, 4, 19, 20], fill=(236, 220, 180, 255), outline=C)
+    d.ellipse([3, 2, 8, 7], fill=(210, 190, 140, 255), outline=C); d.ellipse([16, 17, 21, 22], fill=(210, 190, 140, 255), outline=C)
+    for y in (8, 11, 14):
+        d.line([(8, y), (16, y)], fill=(80, 90, 160, 255))
+    d.rectangle([12, 15, 15, 18], fill=(200, 50, 50, 255))
+    img.save(chemin("objets", "plan.png"))
+    # établi
+    img = Image.new("RGBA", (36, 30)); d = ImageDraw.Draw(img)
+    ombre(d, 18, 26, 16, 3)
+    bois, fonce = (160, 110, 60, 255), (110, 74, 40, 255)
+    d.rectangle([4, 16, 7, 27], fill=fonce, outline=C); d.rectangle([28, 16, 31, 27], fill=fonce, outline=C)
+    d.rectangle([2, 9, 33, 16], fill=bois, outline=C)
+    d.line([(3, 12), (32, 12)], fill=fonce)
+    d.line([(9, 8), (16, 3)], fill=(110, 70, 40, 255), width=2); d.rectangle([14, 1, 19, 4], fill=(170, 170, 180, 255), outline=C)
+    d.rectangle([22, 6, 29, 9], fill=(200, 200, 210, 255), outline=C)
+    img.save(chemin("decors", "etabli.png"))
+    # fourneau
+    img = Image.new("RGBA", (32, 40)); d = ImageDraw.Draw(img)
+    ombre(d, 16, 36, 14, 3)
+    d.rounded_rectangle([3, 8, 29, 37], radius=4, fill=(120, 116, 120, 255), outline=C)
+    for y in range(12, 36, 6):
+        d.line([(4, y), (28, y)], fill=(90, 86, 92, 255))
+    d.rectangle([12, 1, 20, 9], fill=(100, 96, 100, 255), outline=C)
+    d.rounded_rectangle([9, 22, 23, 33], radius=3, fill=(40, 20, 16, 255), outline=C)
+    d.polygon([(11, 33), (14, 25), (16, 29), (18, 24), (21, 33)], fill=(255, 150, 40, 255))
+    d.polygon([(14, 33), (16, 28), (18, 33)], fill=(255, 230, 120, 255))
+    img.save(chemin("decors", "fourneau.png"))
+    # enclume
+    img = Image.new("RGBA", (36, 30)); d = ImageDraw.Draw(img)
+    ombre(d, 18, 26, 15, 3)
+    d.rectangle([10, 20, 26, 26], fill=(110, 76, 44, 255), outline=C)
+    d.polygon([(13, 20), (15, 14), (22, 14), (24, 20)], fill=(60, 62, 70, 255), outline=C)
+    d.polygon([(3, 8), (10, 8), (12, 6), (32, 6), (32, 13), (12, 14), (8, 11)], fill=(80, 82, 92, 255), outline=C)
+    d.line([(13, 7), (31, 7)], fill=(150, 152, 162, 255))
+    img.save(chemin("decors", "enclume.png"))
+    # coffre ancien
+    img = Image.new("RGBA", (30, 28)); d = ImageDraw.Draw(img)
+    ombre(d, 15, 24, 13, 3)
+    d.rectangle([3, 11, 27, 24], fill=(130, 84, 40, 255), outline=C)
+    d.chord([3, 3, 27, 19], 180, 360, fill=(150, 98, 48, 255), outline=C)
+    d.rectangle([3, 10, 27, 12], fill=(200, 160, 60, 255), outline=C)
+    for x in (7, 22):
+        d.rectangle([x, 4, x + 2, 24], fill=(200, 160, 60, 255))
+    d.rectangle([13, 11, 17, 16], fill=(240, 210, 90, 255), outline=C)
+    img.save(chemin("decors", "coffre.png"))
+    # icônes des stations
+    for nom in ("etabli", "fourneau", "enclume"):
+        src = Image.open(chemin("decors", f"{nom}.png"))
+        src.thumbnail((24, 24), Image.NEAREST)
+        img = Image.new("RGBA", (24, 24)); img.paste(src, ((24 - src.width) // 2, (24 - src.height) // 2), src)
+        img.save(chemin("objets", f"{nom}.png"))
+    # bouton Fabriquer (marteau)
+    img = Image.new("RGBA", (48, 48)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([1, 1, 46, 46], radius=10, fill=(150, 90, 50, 255), outline=(20, 20, 26, 255), width=2)
+    d.line([(14, 36), (30, 18)], fill=(110, 70, 40, 255), width=5)
+    d.polygon([(22, 10), (34, 10), (40, 18), (34, 24), (26, 16)], fill=(170, 172, 182, 255), outline=C)
+    img.save(chemin("ui", "fabriquer.png"))
+
+
 if __name__ == "__main__":
     generer_sols()
     generer_arbre()
@@ -811,4 +936,5 @@ if __name__ == "__main__":
     generer_icones()
     generer_filons()
     generer_objets()
+    generer_etape4()
     print("Assets générés dans", os.path.abspath(os.path.join(RACINE, "assets")))

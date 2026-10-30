@@ -114,6 +114,7 @@ func charger_morceau(cle: Vector2i) -> Dictionary:
 	if generateur < 2:
 		# Morceau d'avant les minerais : personne n'a pu le modifier, on le régénère.
 		return {}
+	# (générateur 2 : le serveur y ajoute les coffres, voir Serveur._creer_monde)
 	var m := Monde.deballer(f.get_buffer(f.get_length() - 1))
 	if not m.is_empty():
 		m["generateur"] = generateur

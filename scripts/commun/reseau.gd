@@ -18,7 +18,7 @@ signal evenement(genre: String, donnees: Dictionary)
 signal pong(ms: int)
 signal morceau_recu(cle: Vector2i, donnees: PackedByteArray)
 signal case_changee(c: Vector2i, deco: int)
-signal inventaire_recu(inv: Array)
+signal inventaire_recu(inv: Array, equipement: Dictionary)
 signal recolte_recue(progres: float, c: Vector2i)
 signal sacs_recus(liste: Array)
 signal sac_recu(infos: Dictionary)
@@ -205,6 +205,11 @@ func c_ramasser(id: int) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func c_atelier(genre: String, valeur: String) -> void:
+	if serveur: serveur.sur_atelier(multiplayer.get_remote_sender_id(), genre, valeur)
+
+
+@rpc("any_peer", "call_remote", "reliable")
 func c_jeter(case: int) -> void:
 	if serveur: serveur.sur_jeter(multiplayer.get_remote_sender_id(), case)
 
@@ -263,8 +268,8 @@ func s_case(c: Vector2i, deco: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func s_inventaire(inv: Array) -> void:
-	inventaire_recu.emit(inv)
+func s_inventaire(inv: Array, equipement: Dictionary) -> void:
+	inventaire_recu.emit(inv, equipement)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)

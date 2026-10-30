@@ -27,8 +27,9 @@ func charger(donnees: Dictionary) -> void:
 	for d in donnees.get("sacs", []):
 		var objets := []
 		for o in d.get("objets", []):
-			if Objets.LISTE.has(str(o.get("id", ""))) and int(o.get("n", 0)) > 0:
-				objets.append({"id": str(o.id), "n": int(o.n)})
+			var propre := Objets.nettoyer_objet(o)
+			if not propre.is_empty():
+				objets.append(propre)
 		if objets.is_empty():
 			continue
 		var id := int(d.id)
@@ -51,11 +52,18 @@ func enregistrer(donnees: Dictionary) -> void:
 
 func preparer_session(s: Dictionary, fiche: Dictionary) -> void:
 	s.inventaire = Objets.nettoyer(fiche.get("inventaire", []))
+	s.equipement = Equipement.equipement_vide()
+	var brut: Dictionary = fiche.get("equipement", {})
+	for emplacement in Equipement.EMPLACEMENTS:
+		var o := Objets.nettoyer_objet(brut.get(emplacement, {}))
+		if not o.is_empty() and Objets.infos(o.id).get("emplacement", "") == emplacement:
+			s.equipement[emplacement] = o
 	s.recolte = {}
 
 
 func memoriser(s: Dictionary, fiche: Dictionary) -> void:
 	fiche["inventaire"] = s.inventaire.duplicate(true)
+	fiche["equipement"] = s.equipement.duplicate(true)
 
 
 ## À la connexion : inventaire et sacs au sol.
@@ -68,7 +76,7 @@ func accueillir(s: Dictionary) -> void:
 
 
 func envoyer_inventaire(s: Dictionary) -> void:
-	Reseau.s_inventaire.rpc_id(s.id, s.inventaire)
+	Reseau.s_inventaire.rpc_id(s.id, s.inventaire, s.equipement)
 
 
 # ------------------------------------------------------------------ Récolte
@@ -104,18 +112,21 @@ func _avancer_recolte(s: Dictionary, delta: float) -> void:
 		return
 	var deco: int = serveur.monde.deco_en(c.x, c.y)
 	var r: Dictionary = Objets.RECOLTE[deco]
-	s.recolte.progres += delta / Objets.duree_recolte(deco, s.role, serveur.combat.a_effet(s, "ruee"))
+	s.recolte.progres += delta / Objets.duree_recolte(deco, s.role, serveur.combat.a_effet(s, "ruee"), s.stats.recolte)
 	if s.recolte.progres < 1.0:
 		return
 	s.recolte.progres = 0.0
-	if Objets.ajouter(s.inventaire, r.objet, 1) > 0:
+	var objet: String = r.objet
+	if objet == "plan":
+		objet = Equipement.plan_pour_danger(serveur.monde.danger_en(c.x, c.y))
+	if Objets.ajouter(s.inventaire, objet, 1) > 0:
 		Reseau.s_message.rpc_id(s.id, "Inventaire plein : jette ou dépose des objets.", "systeme")
 		_arreter(s)
 		return
 	envoyer_inventaire(s)
 	var centre := VueMonde.centre_case(c)
 	serveur.combat.evenement("recolte", {"id": s.id, "pos": centre, "angle": (centre - s.pos).angle(),
-		"objet": r.objet, "minerai": r.minerai})
+		"objet": objet, "minerai": r.minerai})
 	var reste: int = _usure.get(c, int(r.coups)) - 1
 	if reste > 0:
 		_usure[c] = reste
@@ -123,8 +134,13 @@ func _avancer_recolte(s: Dictionary, delta: float) -> void:
 	# Décor épuisé : il disparaît et repoussera plus tard.
 	_usure.erase(c)
 	_changer_case(c, Monde.Deco.AUCUN)
-	serveur.donnees.repousses.append([c.x, c.y, deco, float(r.repousse) * 60.0])
+	if int(r.repousse) > 0:
+		serveur.donnees.repousses.append([c.x, c.y, deco, float(r.repousse) * 60.0])
 	_arreter(s)
+
+
+func changer_case(c: Vector2i, deco: int) -> void:
+	_changer_case(c, deco)
 
 
 func _changer_case(c: Vector2i, deco: int) -> void:
@@ -206,6 +222,12 @@ func mourir(s: Dictionary) -> void:
 			continue
 		tombes.append(o)
 		s.inventaire[i] = {}
+	for emplacement in s.equipement:
+		var o: Dictionary = s.equipement[emplacement]
+		if not o.is_empty() and not Objets.infos(o.id).get("lie", false):
+			tombes.append(o)
+			s.equipement[emplacement] = {}
+	serveur.combat.recalculer(s)
 	if tombes.is_empty():
 		return
 	_nouveau_sac(s.pos, tombes, "corps", s.nom)
@@ -221,11 +243,13 @@ func sur_ramasser(s: Dictionary, id: int) -> void:
 	var pris := {}
 	var restes := []
 	for o in sac.objets:
-		var reste := Objets.ajouter(s.inventaire, o.id, int(o.n))
+		var reste := Objets.ajouter_pile(s.inventaire, o)
 		if reste < int(o.n):
 			pris[o.id] = pris.get(o.id, 0) + int(o.n) - reste
 		if reste > 0:
-			restes.append({"id": o.id, "n": reste})
+			var r: Dictionary = o.duplicate()
+			r.n = reste
+			restes.append(r)
 	if pris.is_empty():
 		Reseau.s_message.rpc_id(s.id, "Inventaire plein.", "systeme")
 		return
@@ -271,6 +295,8 @@ func donner(s: Dictionary, id: String, n: int) -> int:
 
 func vider(s: Dictionary) -> void:
 	s.inventaire = Objets.inventaire_vide()
+	s.equipement = Equipement.equipement_vide()
+	serveur.combat.recalculer(s)
 	envoyer_inventaire(s)
 
 

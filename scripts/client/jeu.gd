@@ -69,6 +69,9 @@ const RAYON_GARDE := 4 # morceaux gardés autour du joueur (le serveur envoie da
 const TEX_SAC := preload("res://assets/objets/sac.png")
 const TEX_CORPS := preload("res://assets/objets/corps.png")
 var inventaire: Array = []
+var equipement := {}
+var _fabrication_vue: FabricationVue
+var _accu_stations := 0.0
 var sacs := {} # id -> {infos, noeud}
 var _inventaire_vue: InventaireVue
 var _cible := {} # ce qu'on peut récolter ou ramasser : {genre: "deco"|"sac", case|id, pos}
@@ -128,9 +131,11 @@ func _ready() -> void:
 	Reseau.pong.connect(func(ms): _ping = ms)
 	Reseau.morceau_recu.connect(_sur_morceau)
 	Reseau.case_changee.connect(_sur_case)
-	Reseau.inventaire_recu.connect(func(inv):
+	Reseau.inventaire_recu.connect(func(inv, equip):
 		inventaire = inv
-		_inventaire_vue.afficher(inv))
+		equipement = equip
+		_inventaire_vue.afficher(inv, equip)
+		_fabrication_vue.maj(inv, _fabrication_vue.stations))
 	Reseau.recolte_recue.connect(func(p, _c): _recolte_progres = p)
 	Reseau.sacs_recus.connect(func(liste):
 		for infos_sac in liste:
@@ -147,12 +152,15 @@ func _ready() -> void:
 			if c.begins_with("@"):
 				delai = float(c.get_slice(" ", 0).substr(1))
 				c = c.substr(c.find(" ") + 1)
-			get_tree().create_timer(delai).timeout.connect(Reseau.c_chat.rpc_id.bind(1, c))
+			if c.begins_with("!"): # « !fabriquer etabli » : action d'atelier (tests)
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_atelier.rpc_id.bind(1, c.substr(1).get_slice(" ", 0), c.get_slice(" ", 1)))
+			else:
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_chat.rpc_id.bind(1, c))
 
 
 func _en_jeu() -> bool:
 	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible \
-		and not _grande_carte.visible and not _inventaire_vue.visible
+		and not _grande_carte.visible and not _inventaire_vue.visible and not _fabrication_vue.visible
 
 
 # ------------------------------------------------------------------ Boucle
@@ -302,10 +310,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_grande_carte.visible = false
 		elif _inventaire_vue.visible:
 			_inventaire_vue.visible = false
+		elif _fabrication_vue.visible:
+			_fabrication_vue.visible = false
 		else:
 			_menu_pause.visible = not _menu_pause.visible
 	elif event.is_action_pressed("inventaire") and not _saisie.has_focus() and not _menu_pause.visible:
-		_inventaire_vue.visible = not _inventaire_vue.visible
+		_basculer_fenetre(_inventaire_vue)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("fabriquer") and not _saisie.has_focus() and not _menu_pause.visible:
+		_basculer_fenetre(_fabrication_vue)
 		get_viewport().set_input_as_handled()
 	elif not _en_jeu() or _visee_tactile:
 		return
@@ -548,6 +561,7 @@ func _sur_reglages(r: Dictionary) -> void:
 		_barre.definir_role(reglages.role)
 		_pret = {"attaque": 0.0, "competence": 0.0}
 	moi.equipe = reglages.equipe
+	_inventaire_vue.maj_stats(reglages.get("stats", {}))
 	for a in autres.values():
 		_maj_allie(a)
 
@@ -560,6 +574,7 @@ func _maj_allie(a: JoueurVisuel) -> void:
 
 func _ajouter_autre(id: int, i: Dictionary) -> void:
 	if id == mon_id:
+		moi.definir_arme(str(i.get("arme", "")))
 		return
 	var j: JoueurVisuel = autres.get(id)
 	if j == null:
@@ -569,6 +584,7 @@ func _ajouter_autre(id: int, i: Dictionary) -> void:
 		vue.objets.add_child(j)
 		autres[id] = j
 	j.definir_role(str(i.get("role", "guerrier")))
+	j.definir_arme(str(i.get("arme", "")))
 	j.equipe = str(i.get("equipe", ""))
 	_maj_allie(j)
 
@@ -651,6 +667,11 @@ func _sur_evenement(genre: String, d: Dictionary) -> void:
 			if int(d.id) == mon_id:
 				var info := Objets.infos(str(d.objet))
 				effets.texte(d.pos, "+1 %s" % info.nom, Objets.COULEURS_RARETE[int(info.rarete)])
+		"fabrication":
+			if int(d.id) == mon_id:
+				var info_f := Objets.infos(str(d.objet))
+				effets.texte(d.pos, info_f.nom, Objets.COULEURS_RARETE[int(info_f.rarete)])
+			effets.explosion(d.pos + Vector2(0, -10), "impact", 0.5)
 		"ramasser":
 			if int(d.id) == mon_id:
 				var parts := []
@@ -735,7 +756,28 @@ func _interagir() -> void:
 		Reseau.c_ramasser.rpc_id(1, int(_cible.id))
 
 
+func _basculer_fenetre(f: Control) -> void:
+	var ouvrir := not f.visible
+	_inventaire_vue.visible = false
+	_fabrication_vue.visible = false
+	f.visible = ouvrir
+	if ouvrir:
+		_maj_stations()
+		if f == _fabrication_vue:
+			_fabrication_vue.rafraichir()
+
+
+func _maj_stations() -> void:
+	var st := Atelier.stations_autour(monde, _mvt.pos)
+	_inventaire_vue.stations = st
+	_fabrication_vue.maj(inventaire, st)
+
+
 func _maj_interaction(delta: float) -> void:
+	_accu_stations += delta
+	if _accu_stations > 0.5 and (_inventaire_vue.visible or _fabrication_vue.visible):
+		_accu_stations = 0.0
+		_maj_stations()
 	_cible = _chercher_cible() if _en_jeu() or _bouton_tenu else {}
 	var tenu := _bouton_tenu or Config.auto_recolte or (_en_jeu() and Input.is_action_pressed("interagir"))
 	var vise_deco: bool = _cible.get("genre", "") == "deco"
@@ -753,7 +795,8 @@ func _maj_interaction(delta: float) -> void:
 		_recolte_progres = -1.0
 	# Barre de progression lissée entre deux messages du serveur.
 	if _recolte_envoyee and _recolte_progres >= 0.0 and Objets.recoltable(monde.deco_en(_recolte_case.x, _recolte_case.y)):
-		var duree := Objets.duree_recolte(monde.deco_en(_recolte_case.x, _recolte_case.y), reglages.role, moi.drapeaux & 16 != 0)
+		var duree := Objets.duree_recolte(monde.deco_en(_recolte_case.x, _recolte_case.y), reglages.role, moi.drapeaux & 16 != 0,
+			float(reglages.get("stats", {}).get("recolte", 0.0)))
 		_recolte_progres = minf(_recolte_progres + delta / duree, 1.0)
 	# Invite au-dessus de la cible
 	var touche := "" if Config.est_mobile() else "F : "
@@ -910,8 +953,16 @@ func _creer_interface() -> void:
 	_ui.add_child(centre)
 	_inventaire_vue = InventaireVue.new()
 	_inventaire_vue.visible = false
-	_inventaire_vue.jeter.connect(func(c): Reseau.c_jeter.rpc_id(1, c))
+	_inventaire_vue.action.connect(func(genre, valeur):
+		if genre == "jeter":
+			Reseau.c_jeter.rpc_id(1, int(valeur))
+		else:
+			Reseau.c_atelier.rpc_id(1, genre, valeur))
 	centre.add_child(_inventaire_vue)
+	_fabrication_vue = FabricationVue.new()
+	_fabrication_vue.visible = false
+	_fabrication_vue.fabriquer.connect(func(id): Reseau.c_atelier.rpc_id(1, "fabriquer", id))
+	centre.add_child(_fabrication_vue)
 	_invite = Label.new()
 	_invite.z_index = 30
 	_invite.custom_minimum_size = Vector2(200, 0)
@@ -940,8 +991,16 @@ func _creer_interface() -> void:
 		bouton_sac.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		bouton_sac.position = Vector2(-370, 10)
 		bouton_sac.custom_minimum_size = Vector2(60, 56)
-		bouton_sac.pressed.connect(func(): _inventaire_vue.visible = not _inventaire_vue.visible)
+		bouton_sac.pressed.connect(_basculer_fenetre.bind(_inventaire_vue))
 		_ui.add_child(bouton_sac)
+		var bouton_fab := Button.new()
+		bouton_fab.icon = preload("res://assets/ui/fabriquer.png")
+		bouton_fab.expand_icon = true
+		bouton_fab.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		bouton_fab.position = Vector2(-440, 10)
+		bouton_fab.custom_minimum_size = Vector2(60, 56)
+		bouton_fab.pressed.connect(_basculer_fenetre.bind(_fabrication_vue))
+		_ui.add_child(bouton_fab)
 
 	_lieu = Label.new()
 	_lieu.position = Vector2(12, 30)
@@ -1001,7 +1060,7 @@ func _creer_interface() -> void:
 		_choix_role.visible = true)
 	vb.add_child(changer)
 	var aide := Label.new()
-	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire\nEntrée : chat (/aide)    F3 : infos développeur"
+	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire    C : fabriquer\nEntrée : chat (/aide)    F3 : infos développeur"
 	aide.add_theme_font_size_override("font_size", 14)
 	aide.modulate.a = 0.7
 	vb.add_child(aide)

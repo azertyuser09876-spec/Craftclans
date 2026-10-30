@@ -126,6 +126,12 @@ func definir_role(p_role: String) -> void:
 	arme.offset = Vector2(4, -arme.texture.get_height() / 2.0)
 
 
+## Arme équipée : l'arme du rôle prend la couleur de son matériau.
+func definir_arme(id: String) -> void:
+	var info: Dictionary = Equipement.objets().get(id, {})
+	arme.modulate = Color.WHITE if info.is_empty() else Color.WHITE.lerp(info.couleur, 0.65)
+
+
 func definir_couleur_nom(c: Color) -> void:
 	etiquette.add_theme_color_override("font_color", c)
 

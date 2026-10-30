@@ -16,6 +16,7 @@ var monde: Monde
 var commandes: Commandes
 var combat: Combat
 var recolte: Recolte
+var atelier: Atelier
 var actif := false
 var demarre_le := 0
 var derniere_sauvegarde := ""
@@ -53,6 +54,7 @@ func _ready() -> void:
 	combat.mannequins_par_defaut()
 	recolte = Recolte.new(self)
 	recolte.charger(donnees)
+	atelier = Atelier.new(self)
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
@@ -115,13 +117,19 @@ func journal(texte: String) -> void:
 
 func _creer_monde() -> void:
 	monde = Monde.new(int(donnees.graine), true)
-	monde.chargeur = sauvegarde.charger_morceau
+	monde.chargeur = func(cle: Vector2i) -> Dictionary:
+		var m := sauvegarde.charger_morceau(cle)
+		if not m.is_empty() and int(m.get("generateur", 0)) < 3:
+			monde.ajouter_coffres(cle, m) # morceau d'avant les coffres
+			m["generateur"] = Monde.GENERATEUR
+			sauvegarde.enregistrer_morceau(cle, m)
+		return m
 	monde.sur_creation = func(cle: Vector2i, m: Dictionary):
 		sauvegarde.enregistrer_morceau(cle, m)
 		cartes[cle] = Monde.image_carte(m)
 	cartes.clear()
 	for cle in sauvegarde.morceaux_sauvegardes():
-		var m := sauvegarde.charger_morceau(cle)
+		var m: Dictionary = monde.chargeur.call(cle)
 		if m.is_empty():
 			m = monde.morceau(cle) # ancien morceau : régénéré (et sauvegardé) avec les minerais
 		if not m.is_empty():
@@ -325,6 +333,8 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	combat.preparer_session(s, fiche)
 	recolte.preparer_session(s, fiche)
 	joueurs[id] = s
+	combat.recalculer(s)
+	s.vie = s.vie_max
 	var autres := {}
 	for autre_id in joueurs:
 		if autre_id != id:
@@ -346,8 +356,9 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 
 
 func _infos_publiques(s: Dictionary) -> Dictionary:
+	var arme: Dictionary = s.equipement.get("arme", {})
 	return {"nom": s.nom, "pos": s.pos, "apparence": s.apparence, "admin": est_admin(s.nom),
-		"role": s.role, "equipe": s.equipe}
+		"role": s.role, "equipe": s.equipe, "arme": "" if arme.is_empty() else str(arme.id)}
 
 
 ## Prévient tout le monde (y compris le joueur) d'un changement de rôle, d'équipe…
@@ -393,6 +404,19 @@ func sur_jeter(id: int, case: int) -> void:
 	var s: Dictionary = joueurs.get(id, {})
 	if not s.is_empty():
 		recolte.sur_jeter(s, case)
+
+
+## Atelier : fabriquer, s'équiper, poser une station, améliorer (genre, valeur).
+func sur_atelier(id: int, genre: String, valeur: String) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if s.is_empty():
+		return
+	match genre:
+		"fabriquer": atelier.sur_fabriquer(s, valeur)
+		"equiper": atelier.sur_equiper(s, int(valeur))
+		"retirer": atelier.sur_retirer(s, valeur)
+		"poser": atelier.sur_poser(s, int(valeur))
+		"ameliorer": atelier.sur_ameliorer(s, valeur)
 
 
 func sur_role(id: int, role: String) -> void:
@@ -450,7 +474,7 @@ func envoyer_reglages(id: int) -> void:
 		"mode_dev": donnees.reglages.mode_dev, "cheats": donnees.reglages.cheats,
 		"admin": est_admin(s.nom), "vitesse": vitesse_de(s), "vol": s.vol, "dieu": s.dieu,
 		"pvp": donnees.reglages.get("pvp", true), "role": s.role, "equipe": s.equipe,
-		"esquive": combat.recharge_esquive(s),
+		"esquive": combat.recharge_esquive(s), "stats": s.stats,
 	})
 
 

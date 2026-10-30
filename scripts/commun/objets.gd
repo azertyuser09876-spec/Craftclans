@@ -45,14 +45,30 @@ const RECOLTE := {
 	Monde.Deco.FILON_OR: {"objet": "or", "coups": 3, "temps": 3.0, "minerai": true, "repousse": 40, "verbe": "Miner"},
 	Monde.Deco.FILON_MITHRIL: {"objet": "mithril", "coups": 2, "temps": 4.0, "minerai": true, "repousse": 60, "verbe": "Miner"},
 	Monde.Deco.CRISTAL: {"objet": "cristal", "coups": 2, "temps": 5.0, "minerai": true, "repousse": 90, "verbe": "Miner"},
+	# Étape 4 : stations posées par les joueurs (démontées, elles redonnent l'objet) et coffres anciens.
+	Monde.Deco.ETABLI: {"objet": "etabli", "coups": 1, "temps": 1.0, "minerai": false, "repousse": 0, "verbe": "Démonter"},
+	Monde.Deco.FOURNEAU: {"objet": "fourneau", "coups": 1, "temps": 1.5, "minerai": false, "repousse": 0, "verbe": "Démonter"},
+	Monde.Deco.ENCLUME: {"objet": "enclume", "coups": 1, "temps": 1.5, "minerai": false, "repousse": 0, "verbe": "Démonter"},
+	Monde.Deco.COFFRE: {"objet": "plan", "coups": 1, "temps": 1.5, "minerai": false, "repousse": 180, "verbe": "Ouvrir"},
 }
+
+## Décor posé par chaque station (et l'inverse).
+const DECOS_STATIONS := {"etabli": Monde.Deco.ETABLI, "fourneau": Monde.Deco.FOURNEAU, "enclume": Monde.Deco.ENCLUME}
 
 
 static func infos(id: String) -> Dictionary:
-	return LISTE.get(id, {"nom": id, "pile": 1, "rarete": 0, "description": ""})
+	if LISTE.has(id):
+		return LISTE[id]
+	return Equipement.objets().get(id, {"nom": id, "pile": 1, "rarete": 0, "description": ""})
+
+
+static func existe(id: String) -> bool:
+	return LISTE.has(id) or Equipement.objets().has(id)
 
 
 static func icone(id: String) -> Texture2D:
+	if id.begins_with("plan_"):
+		id = "plan"
 	var chemin := "res://assets/objets/%s.png" % id
 	return load(chemin) if ResourceLoader.exists(chemin) else null
 
@@ -61,14 +77,17 @@ static func recoltable(deco: int) -> bool:
 	return RECOLTE.has(deco)
 
 
-## Durée d'une récolte selon le rôle (le mineur mine 2,5 fois plus vite, et encore plus en Ruée).
-static func duree_recolte(deco: int, role: String, ruee: bool) -> float:
+## Durée d'une récolte selon le rôle (le mineur mine 2,5 fois plus vite, et encore plus en Ruée)
+## et l'outil porté (bonus : +0,4 = 40 % plus vite).
+static func duree_recolte(deco: int, role: String, ruee: bool, bonus := 0.0) -> float:
 	var r: Dictionary = RECOLTE[deco]
 	var vitesse := 1.0
 	if r.minerai:
 		vitesse = float(Roles.donnees(role).get("minage", 1.0))
 	if ruee:
 		vitesse *= 2.0
+	if r.objet != "plan" and not DECOS_STATIONS.has(r.objet):
+		vitesse *= 1.0 + bonus
 	return float(r.temps) / vitesse
 
 
@@ -102,6 +121,41 @@ static func ajouter(inv: Array, id: String, n: int) -> int:
 	return n
 
 
+## Ajoute une pile venue d'un sac ou de l'équipement (garde le niveau d'amélioration) ;
+## renvoie le nombre qui n'a pas pu entrer.
+static func ajouter_pile(inv: Array, o: Dictionary) -> int:
+	if int(infos(o.id).pile) > 1:
+		return ajouter(inv, o.id, int(o.n))
+	for i in inv.size():
+		if inv[i].is_empty():
+			inv[i] = o.duplicate()
+			return 0
+	return int(o.n)
+
+
+## Nombre d'objets de ce genre dans l'inventaire.
+static func compter(inv: Array, id: String) -> int:
+	var n := 0
+	for c in inv:
+		if not c.is_empty() and c.id == id:
+			n += int(c.n)
+	return n
+
+
+## Retire n objets (suppose qu'il y en a assez).
+static func retirer(inv: Array, id: String, n: int) -> void:
+	for i in range(inv.size() - 1, -1, -1):
+		if n <= 0:
+			return
+		var c: Dictionary = inv[i]
+		if not c.is_empty() and c.id == id:
+			var pris := mini(n, int(c.n))
+			c.n -= pris
+			n -= pris
+			if c.n <= 0:
+				inv[i] = {}
+
+
 ## Place possible pour cet objet (en nombre d'objets).
 static func place_pour(inv: Array, id: String) -> int:
 	var pile := int(infos(id).pile)
@@ -128,6 +182,16 @@ static func nettoyer(brut) -> Array:
 	if brut is Array:
 		for i in mini(brut.size(), TAILLE_INVENTAIRE):
 			var c = brut[i]
-			if c is Dictionary and LISTE.has(str(c.get("id", ""))) and int(c.get("n", 0)) > 0:
-				inv[i] = {"id": str(c.id), "n": int(c.n)}
+			var o := nettoyer_objet(c)
+			if not o.is_empty():
+				inv[i] = o
 	return inv
+
+
+static func nettoyer_objet(c) -> Dictionary:
+	if not c is Dictionary or not existe(str(c.get("id", ""))) or int(c.get("n", 0)) <= 0:
+		return {}
+	var o := {"id": str(c.id), "n": int(c.n)}
+	if int(c.get("niv", 0)) > 0:
+		o["niv"] = clampi(int(c.niv), 0, Equipement.NIVEAU_MAX)
+	return o
