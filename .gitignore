@@ -1,0 +1,18 @@
+# Godot
+.godot/
+*.translation
+export_credentials.cfg
+# Exports locaux
+build/
+*.apk
+*.aab
+*.exe
+*.pck
+# Clés de signature : jamais dans le dépôt
+*.keystore
+*.jks
+# Divers
+__pycache__/
+.DS_Store
+Thumbs.db
+outils/godot_chemin.txt

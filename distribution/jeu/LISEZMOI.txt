@@ -1,0 +1,24 @@
+CRAFTCLANS - le jeu
+===================
+
+Sur PC (Windows)
+  Lance Craftclans.exe. Si Windows affiche « Windows a protégé votre ordinateur »,
+  clique sur « Informations complémentaires » puis « Exécuter quand même »
+  (le jeu n'est pas signé, c'est normal pour un projet perso).
+
+Sur téléphone (Android)
+  Copie Craftclans.apk sur le téléphone et ouvre-le. Android demande d'autoriser
+  l'installation d'applications inconnues : accepte pour ton gestionnaire de fichiers.
+
+Se connecter
+  Pseudo : ce que tu veux (2 à 16 caractères). Il est réservé à ton appareil
+  dès ta première connexion.
+  Adresse du serveur : l'adresse donnée par le maître du serveur
+  (exemple : 86.12.34.56, ou monserveur.duckdns.org). Le port 8000 est ajouté tout seul.
+  Sur le même réseau que le serveur, l'adresse locale du PC suffit (exemple : 192.168.1.20).
+
+Commandes
+  ZQSD ou flèches : se déplacer (joystick à gauche de l'écran sur téléphone)
+  Entrée : écrire dans le chat. /aide affiche les commandes.
+  F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
+  Échap : menu

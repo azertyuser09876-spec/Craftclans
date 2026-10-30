@@ -1,0 +1,46 @@
+CRAFTCLANS - le serveur et son programme de gestion
+===================================================
+
+Démarrer
+  Double-clique sur Craftclans-Serveur.exe : le serveur démarre et la fenêtre de
+  gestion s'ouvre. Fermer cette fenêtre arrête le serveur (le monde est sauvegardé).
+  Sans fenêtre (par exemple pour le laisser tourner discrètement) :
+  serveur-sans-fenetre.bat (fermer la console arrête le serveur ; la sauvegarde
+  automatique a lieu toutes les minutes et à chaque déconnexion).
+
+Ouvrir l'accès depuis Internet
+  1. Pare-feu Windows : clic droit sur ouvrir-port-pare-feu.bat > « Exécuter en tant
+     qu'administrateur » (une seule fois). Windows peut aussi le proposer au premier lancement.
+  2. Box : redirige le port 8000 en TCP vers ce PC (c'est déjà fait selon toi).
+  3. Donne à tes amis ton adresse IP publique (https://www.monip.org) ou un nom
+     d'adresse dynamique (duckdns.org, gratuit) si ton IP change.
+
+La fenêtre de gestion
+  Tableau de bord : état, adresses, sauvegarde, réglages, mot de passe admin, carte.
+  Joueurs : rendre admin, téléporter, vitesse, vol, mode dieu, expulser, bannir,
+            oublier un joueur (libère son pseudo s'il a changé de téléphone).
+  Monde et triches : heure du jeu, vitesse du temps, mode développeur, triches,
+            remise à zéro du monde (l'ancien est archivé, jamais effacé).
+  Boss mondiaux : activer, endormir, programmer à une date ou chaque semaine.
+  Console : journal et commandes (tape « aide »).
+
+Devenir admin en jeu
+  Le tout premier joueur qui se connecte devient admin. Sinon : /login <mot de passe>
+  (le mot de passe est dans le tableau de bord).
+
+Les sauvegardes
+  Elles sont dans %APPDATA%\Craftclans\serveur (bouton « Ouvrir le dossier ») :
+    monde\monde.json   le monde actuel
+    copies\            copies de secours (les 10 dernières, une toutes les 30 minutes)
+    archives\          anciens mondes (remise à zéro ou grosse mise à jour)
+    config.json        réglages du serveur (port, mot de passe admin, message du jour)
+    journal.txt        journal du serveur
+  Elles ne sont pas dans le dossier du serveur : remplacer le serveur par une nouvelle
+  version ne touche pas au monde. Le serveur convertit tout seul une ancienne sauvegarde.
+  Seule une grosse mise à jour qui change tout remet le monde à zéro, et l'ancien
+  monde est alors rangé dans archives\.
+
+Mettre à jour
+  Ferme le serveur, remplace les fichiers .exe par ceux de la nouvelle version, relance.
+  Les joueurs doivent avoir une version du jeu compatible : sinon le jeu leur dit de le
+  mettre à jour.

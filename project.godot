@@ -1,0 +1,48 @@
+; Fichier de configuration du projet Godot.
+; La ligne config/version est mise à jour automatiquement par publier.bat.
+
+config_version=5
+
+[application]
+
+config/name="Craftclans"
+config/version="0.0.1"
+run/main_scene="res://principal.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://icon.png"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Craftclans"
+boot_splash/bg_color=Color(0.133, 0.188, 0.259, 1)
+boot_splash/image="res://assets/ui/demarrage.png"
+boot_splash/fullsize=false
+run/max_fps=120
+
+[autoload]
+
+Config="*res://scripts/commun/config.gd"
+Reseau="*res://scripts/commun/reseau.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+window/energy_saving/keep_screen_on=true
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=true
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
