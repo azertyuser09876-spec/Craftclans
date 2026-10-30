@@ -478,10 +478,11 @@ def dessiner_accessoire(d, ox, oy, direction, etape, role):
         vert, plume = (60, 120, 60, 255), (210, 50, 50, 255)
         d.polygon([(ox + 8, y0 + 5), (ox + 24, y0 + 5), (ox + 18, y0 - 3)], fill=vert, outline=C)
         d.line([(ox + 20, y0 - 1), (ox + 26, y0 - 6)], fill=plume, width=2)
-        if not face:  # carquois dans le dos
-            d.rectangle([ox + 19, y0 + 11, ox + 23, y0 + 22], fill=(120, 80, 40, 255), outline=C)
+        if not face:  # carquois dans le dos (de profil : du côté du dos)
+            x = {1: ox + 21, 2: ox + 7, 3: ox + 19}[direction]
+            d.rectangle([x, y0 + 11, x + 4, y0 + 22], fill=(120, 80, 40, 255), outline=C)
             for i in range(3):
-                d.point((ox + 20 + i, y0 + 10), fill=(240, 240, 240, 255))
+                d.point((x + 1 + i, y0 + 10), fill=(240, 240, 240, 255))
     elif role == "mage":
         violet, etoile = (110, 60, 170, 255), (250, 220, 90, 255)
         d.polygon([(ox + 6, y0 + 5), (ox + 26, y0 + 5), (ox + 19, y0 - 8)], fill=violet, outline=C)
@@ -495,9 +496,13 @@ def dessiner_accessoire(d, ox, oy, direction, etape, role):
         d.rectangle([ox + 9, y0 + 3, ox + 23, y0 + 5], fill=bandeau, outline=C)
         if direction != 2:
             d.line([(ox + 23, y0 + 4), (ox + 27, y0 + 7)], fill=bandeau, width=2)
-        if not face:  # sac à dos
+        if dos:  # sac à dos, vu de derrière
             d.rounded_rectangle([ox + 10, y0 + 13, ox + 22, y0 + 22], radius=2, fill=(140, 100, 50, 255), outline=C)
             d.rectangle([ox + 12, y0 + 15, ox + 20, y0 + 16], fill=(110, 76, 36, 255))
+        elif not face:  # de profil : le sac dépasse du côté du dos
+            x = ox + 20 if direction == 1 else ox + 6
+            d.rounded_rectangle([x, y0 + 13, x + 6, y0 + 22], radius=2, fill=(140, 100, 50, 255), outline=C)
+            d.line([(x + 1, y0 + 15), (x + 5, y0 + 15)], fill=(110, 76, 36, 255))
     elif role == "paladin":
         or_, blanc = (230, 190, 70, 255), (245, 245, 250, 255)
         d.rounded_rectangle([ox + 8, y0 + 0, ox + 24, y0 + 7], radius=5, fill=or_, outline=C)
