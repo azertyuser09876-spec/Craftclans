@@ -27,6 +27,8 @@ Commandes sur PC
   Espace : esquive (invincible pendant l'esquive)
   R : changer de rôle (pas en plein combat)
   M : grande carte (ou clic sur la minicarte)
+  F (maintenir) : récolter l'arbre, le rocher ou le filon le plus proche ; F : ramasser un sac ou un corps
+  I ou Tab : inventaire (pour jeter un objet au sol)
   Entrée : écrire dans le chat. /aide affiche les commandes.
   F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
   Échap : menu
@@ -42,6 +44,16 @@ Le monde
   et tes coordonnées. Plus tu t'éloignes du feu de camp de départ, plus c'est dangereux.
   La carte ne montre que ce que tu as vu pendant la partie.
   La boue et la neige ralentissent. L'eau et la lave bloquent.
+
+Ressources et mort
+  Arbres : bois. Buissons, roseaux, cactus : fibre. Fleurs : herbe médicinale. Rochers : pierre.
+  Filons : cuivre partout, fer dès le danger 2, or dès 4, mithril dès 6, cristal dès 8.
+  Rochers noirs des terres brûlées : obsidienne. Ce qui est récolté repousse au bout d'un moment.
+  Le Mineur mine 2,5 fois plus vite ; sa Ruée minière double encore la vitesse pendant 8 s.
+  À ta mort, tout ce que tu portes tombe sur ton corps (marqué en orange sur la carte).
+  Reviens le chercher dans les 30 minutes... avant que quelqu'un d'autre ne le pille !
+  Sur téléphone : le bouton pioche apparaît quand tu es à côté de quelque chose,
+  le bouton sac en haut ouvre l'inventaire.
 
 Équipes
   /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,

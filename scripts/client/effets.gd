@@ -156,6 +156,24 @@ func balayage(pos: Vector2, angle: float, portee: float) -> void:
 
 # ------------------------------------------------------------------ Nombres
 
+## Petit texte qui monte (objet récolté, ramassé…).
+func texte(pos: Vector2, t: String, couleur := Color.WHITE) -> void:
+	var l := Label.new()
+	l.text = t
+	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_color_override("font_color", couleur)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	l.add_theme_constant_override("outline_size", 4)
+	l.position = pos + Vector2(-60, -60)
+	l.custom_minimum_size = Vector2(120, 0)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(l)
+	var tw := l.create_tween().set_parallel()
+	tw.tween_property(l, "position:y", l.position.y - 22, 1.0)
+	tw.tween_property(l, "modulate:a", 0.0, 1.0).set_delay(0.4)
+	tw.chain().tween_callback(l.queue_free)
+
+
 func nombre(pos: Vector2, montant: int, soin: bool, sur_moi: bool) -> void:
 	var l := Label.new()
 	l.text = ("+%d" if soin else "%d") % montant

@@ -3,7 +3,7 @@ extends Node
 
 ## À augmenter à chaque changement des messages réseau : un client et un serveur
 ## de protocoles différents refusent de jouer ensemble.
-const PROTOCOLE := 3
+const PROTOCOLE := 4
 
 const PORT_DEFAUT := 8000
 const TAILLE_TUILE := 32
@@ -24,6 +24,8 @@ var auto_deplacement := false
 var capture := ""
 ## Option de test : --auto-commande=texte envoie ce texte dans le chat après la connexion.
 var auto_commande := ""
+## Option de test : --auto-recolte garde la touche de récolte appuyée.
+var auto_recolte := false
 ## Option de test : --tactile affiche l'interface du téléphone sur PC.
 var forcer_tactile := false
 
@@ -46,6 +48,8 @@ func _enter_tree() -> void:
 			forcer_tactile = true
 		elif a == "--auto-deplacement":
 			auto_deplacement = true
+		elif a == "--auto-recolte":
+			auto_recolte = true
 	_creer_touches()
 
 
@@ -66,6 +70,8 @@ func _creer_touches() -> void:
 	_action("competence", [KEY_E])
 	_action("role", [KEY_R])
 	_action("carte", [KEY_M, KEY_SEMICOLON])
+	_action("interagir", [KEY_F])
+	_action("inventaire", [KEY_I, KEY_TAB])
 
 
 func _action(nom: String, touches: Array) -> void:

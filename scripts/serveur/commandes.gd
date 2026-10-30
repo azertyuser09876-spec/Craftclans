@@ -7,8 +7,8 @@ extends RefCounted
 
 var serveur: Node
 
-const PUBLIQUES := ["aide", "joueurs", "boss", "login", "moi", "equipe", "role", "roles"]
-const TRICHES := ["tp", "vitesse", "vol", "dieu", "soigner"]
+const PUBLIQUES := ["aide", "joueurs", "boss", "login", "moi", "equipe", "role", "roles", "objets"]
+const TRICHES := ["tp", "vitesse", "vol", "dieu", "soigner", "donner", "vider"]
 
 const AIDE := """Commandes :
   aide                      cette aide
@@ -19,6 +19,7 @@ const AIDE := """Commandes :
   role <rôle>               changer de rôle (hors combat) ; roles : la liste
   equipe <nom>              rejoindre ou créer une équipe (pas de tirs amis)
   equipe quitter            jouer seul
+  objets                    liste des objets et ressources
 Admin :
   annonce <texte>           message à tout le serveur
   expulser <joueur> [raison]
@@ -34,6 +35,8 @@ Admin :
   mannequin                 ajouter un mannequin d'entraînement à ta position
   mannequins retirer        retirer tous les mannequins
   monde                     infos sur le monde
+  inventaire <joueur>       voir ce que porte un joueur
+  sacs                      objets et corps au sol ; sacs retirer : tout enlever
   boss activer|endormir <id>
   boss programmer <id> <AAAA-MM-JJ> <HH:MM>
   boss hebdo <id> <jour> <HH:MM>    (jour : lundi, mardi…)
@@ -43,7 +46,9 @@ Triche (admin, triches autorisées) :
   vitesse [joueur] <multiplicateur>
   vol [joueur]              traverser les obstacles et l'eau
   dieu [joueur]             invincible
-  soigner [joueur]          remet la vie au maximum"""
+  soigner [joueur]          remet la vie au maximum
+  donner [joueur] <objet> [nombre]   (voir « objets »)
+  vider [joueur]            vide l'inventaire"""
 
 
 func _init(p_serveur: Node) -> void:
@@ -177,6 +182,43 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 			return "Mannequins retirés."
 		"tp":
 			return _tp(args, auteur)
+		"objets":
+			var lignes := ["Objets :"]
+			for id in Objets.LISTE:
+				lignes.append("  %s : %s" % [id, Objets.LISTE[id].nom])
+			return _joindre(lignes, "\n")
+		"donner":
+			var cible_d := _cible(args, auteur)
+			if cible_d.s.is_empty() or cible_d.args.is_empty():
+				return "Utilisation : donner [joueur] <objet> [nombre]"
+			var id_objet: String = cible_d.args[0].to_lower()
+			if not Objets.LISTE.has(id_objet):
+				return "Objet inconnu : %s. Tape objets." % id_objet
+			var n := 1 if cible_d.args.size() < 2 else clampi(int(cible_d.args[1]), 1, 999)
+			var donnes: int = serveur.recolte.donner(cible_d.s, id_objet, n)
+			return "%d %s donné(s) à %s." % [donnes, Objets.infos(id_objet).nom, cible_d.s.nom]
+		"vider":
+			var cible_v := _cible(args, auteur)
+			if cible_v.s.is_empty(): return "Utilisation : vider [joueur]"
+			serveur.recolte.vider(cible_v.s)
+			return "Inventaire de %s vidé." % cible_v.s.nom
+		"inventaire":
+			if args.is_empty(): return "Utilisation : inventaire <joueur>"
+			var cible_i: Dictionary = serveur.session_par_nom(args[0])
+			if cible_i.is_empty(): return "Joueur introuvable."
+			var contenu := []
+			for o in cible_i.inventaire:
+				if not o.is_empty():
+					contenu.append("%d %s" % [o.n, Objets.infos(o.id).nom])
+			return "%s porte : %s" % [cible_i.nom, "rien" if contenu.is_empty() else _joindre(contenu, ", ")]
+		"sacs":
+			if not args.is_empty() and args[0] == "retirer":
+				return "%d sac(s) retiré(s)." % serveur.recolte.retirer_tous_les_sacs()
+			var lignes_s := ["%d sac(s) au sol :" % serveur.recolte.sacs.size()]
+			for sac in serveur.recolte.sacs.values():
+				lignes_s.append("  %s de %s en %d, %d (%d min restantes)" % ["Corps" if sac.genre == "corps" else "Sac",
+					sac.nom, int(sac.pos.x / Config.TAILLE_TUILE), int(sac.pos.y / Config.TAILLE_TUILE), int(sac.reste / 60.0)])
+			return _joindre(lignes_s, "\n")
 		"vitesse":
 			var cible := _cible(args, auteur)
 			if cible.s.is_empty(): return "Utilisation : vitesse [joueur] <multiplicateur>"

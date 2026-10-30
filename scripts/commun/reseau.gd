@@ -17,6 +17,12 @@ signal teleporte(pos: Vector2)
 signal evenement(genre: String, donnees: Dictionary)
 signal pong(ms: int)
 signal morceau_recu(cle: Vector2i, donnees: PackedByteArray)
+signal case_changee(c: Vector2i, deco: int)
+signal inventaire_recu(inv: Array)
+signal recolte_recue(progres: float, c: Vector2i)
+signal sacs_recus(liste: Array)
+signal sac_recu(infos: Dictionary)
+signal sac_retire(id: int)
 
 var serveur: Node = null # renseigné côté serveur
 var raison_refus := ""
@@ -188,6 +194,21 @@ func c_chat(texte: String) -> void:
 	if serveur: serveur.sur_chat(multiplayer.get_remote_sender_id(), texte)
 
 
+@rpc("any_peer", "call_remote", "reliable")
+func c_recolter(actif: bool, c: Vector2i) -> void:
+	if serveur: serveur.sur_recolter(multiplayer.get_remote_sender_id(), actif, c)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_ramasser(id: int) -> void:
+	if serveur: serveur.sur_ramasser(multiplayer.get_remote_sender_id(), id)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_jeter(case: int) -> void:
+	if serveur: serveur.sur_jeter(multiplayer.get_remote_sender_id(), case)
+
+
 @rpc("any_peer", "call_remote", "unreliable")
 func c_ping(t: int) -> void:
 	if serveur: s_pong.rpc_id(multiplayer.get_remote_sender_id(), t)
@@ -233,6 +254,37 @@ func s_reglages(reglages: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable", 2)
 func s_morceau(cle: Vector2i, donnees: PackedByteArray) -> void:
 	morceau_recu.emit(cle, donnees)
+
+
+## Même canal que les morceaux : un changement n'arrive jamais avant le morceau qu'il modifie.
+@rpc("authority", "call_remote", "reliable", 2)
+func s_case(c: Vector2i, deco: int) -> void:
+	case_changee.emit(c, deco)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_inventaire(inv: Array) -> void:
+	inventaire_recu.emit(inv)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered", 1)
+func s_recolte(progres: float, c: Vector2i) -> void:
+	recolte_recue.emit(progres, c)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_sacs(liste: Array) -> void:
+	sacs_recus.emit(liste)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_sac(infos: Dictionary) -> void:
+	sac_recu.emit(infos)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_sac_retire(id: int) -> void:
+	sac_retire.emit(id)
 
 
 @rpc("authority", "call_remote", "reliable")

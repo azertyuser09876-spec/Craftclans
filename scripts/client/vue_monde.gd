@@ -16,6 +16,11 @@ const TEX_DECOS := {
 	Monde.Deco.ROSEAUX: preload("res://assets/decors/roseaux.png"),
 	Monde.Deco.ROCHER_NOIR: preload("res://assets/decors/rocher_noir.png"),
 	Monde.Deco.OS: preload("res://assets/decors/os.png"),
+	Monde.Deco.FILON_CUIVRE: preload("res://assets/decors/filon_cuivre.png"),
+	Monde.Deco.FILON_FER: preload("res://assets/decors/filon_fer.png"),
+	Monde.Deco.FILON_OR: preload("res://assets/decors/filon_or.png"),
+	Monde.Deco.FILON_MITHRIL: preload("res://assets/decors/filon_mithril.png"),
+	Monde.Deco.CRISTAL: preload("res://assets/decors/cristal.png"),
 }
 const DECOS_AU_SOL := [Monde.Deco.FLEURS, Monde.Deco.OS, Monde.Deco.ROSEAUX]
 const DECOS_HAUTES := [Monde.Deco.ARBRE, Monde.Deco.SAPIN, Monde.Deco.SAPIN_NEIGE, Monde.Deco.ARBRE_MORT]
@@ -32,6 +37,7 @@ var nuit: CanvasModulate
 var cartes := {}
 var _conteneurs := {} # Vector2i -> Node2D (décors du morceau)
 var _arbres := {} # case -> Sprite2D (rendus transparents quand on passe derrière)
+var _decos := {} # case -> nœud du décor (pour le retirer quand il est récolté)
 var _transparents: Array = []
 var _lumieres: Array[PointLight2D] = []
 
@@ -81,10 +87,7 @@ func afficher_morceau(cle: Vector2i) -> void:
 	var m := monde.morceau(cle)
 	if m.is_empty():
 		return
-	var t := Config.TAILLE_TUILE
 	var base := cle * Monde.TAILLE_MORCEAU
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([monde.graine, cle.x, cle.y, 1])
 	var conteneur := Node2D.new()
 	conteneur.y_sort_enabled = true
 	objets.add_child(conteneur)
@@ -92,32 +95,63 @@ func afficher_morceau(cle: Vector2i) -> void:
 	for i in Monde.CASES:
 		var c := base + Vector2i(i % Monde.TAILLE_MORCEAU, i / Monde.TAILLE_MORCEAU)
 		var s: int = m.sol[i]
-		var hasard := rng.randf()
+		var hasard := _hasard(c)
 		if s == Monde.Sol.EAU:
 			sol.set_cell(c, 0, Vector2i(0, 0))
 		elif s == Monde.Sol.LAVE:
 			sol.set_cell(c, 0, ATLAS_LAVE)
 		else:
 			sol.set_cell(c, 0, Vector2i(3 if hasard < 0.08 else int(hasard * 37) % 3, s))
-		var d: int = m.deco[i]
-		if d == Monde.Deco.AUCUN:
-			continue
-		var pied := Vector2((c.x + 0.5) * t, (c.y + 0.7) * t)
-		if d == Monde.Deco.FEU:
-			_ajouter_feu(conteneur, pied)
-			continue
-		var spr := Sprite2D.new()
-		spr.texture = TEX_DECOS[d]
-		spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 4)
-		spr.position = pied + Vector2(int(hasard * 1000) % 7 - 3, 0)
-		spr.flip_h = int(hasard * 10000) % 2 == 0
-		if d in DECOS_AU_SOL:
-			spr.z_index = -1 # au ras du sol
-		if d in DECOS_HAUTES:
-			_arbres[c] = spr
-		conteneur.add_child(spr)
-	if not cartes.has(cle):
+		_creer_deco(conteneur, c, m.deco[i])
+	cartes[cle] = ImageTexture.create_from_image(Monde.image_carte(m))
+
+
+static func _hasard(c: Vector2i) -> float:
+	return float(posmod(hash(c), 10007)) / 10007.0
+
+
+func _creer_deco(conteneur: Node2D, c: Vector2i, d: int) -> void:
+	if d == Monde.Deco.AUCUN:
+		return
+	var t := Config.TAILLE_TUILE
+	var hasard := _hasard(c)
+	var pied := Vector2((c.x + 0.5) * t, (c.y + 0.7) * t)
+	if d == Monde.Deco.FEU:
+		_decos[c] = _ajouter_feu(conteneur, pied)
+		return
+	var spr := Sprite2D.new()
+	spr.texture = TEX_DECOS[d]
+	spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 4)
+	spr.position = pied + Vector2(int(hasard * 1000) % 7 - 3, 0)
+	spr.flip_h = int(hasard * 10000) % 2 == 0
+	if d in DECOS_AU_SOL:
+		spr.z_index = -1 # au ras du sol
+	if d in DECOS_HAUTES:
+		_arbres[c] = spr
+	conteneur.add_child(spr)
+	_decos[c] = spr
+
+
+## Une case a changé (récolte, repousse) : remplace son décor et met la carte à jour.
+func changer_case(c: Vector2i) -> void:
+	var cle := Monde.cle_de_case(c.x, c.y)
+	if not _conteneurs.has(cle):
+		return
+	if _decos.has(c):
+		var ancien: Node = _decos[c]
+		_transparents.erase(ancien)
+		_decos.erase(c)
+		_arbres.erase(c)
+		ancien.queue_free()
+	_creer_deco(_conteneurs[cle], c, monde.deco_en(c.x, c.y))
+	var m := monde.morceau(cle)
+	if not m.is_empty():
 		cartes[cle] = ImageTexture.create_from_image(Monde.image_carte(m))
+
+
+## Position du centre d'une case (pour viser un décor).
+static func centre_case(c: Vector2i) -> Vector2:
+	return (Vector2(c) + Vector2(0.5, 0.5)) * Config.TAILLE_TUILE
 
 
 func retirer_morceau(cle: Vector2i) -> void:
@@ -128,6 +162,7 @@ func retirer_morceau(cle: Vector2i) -> void:
 		var c := base + Vector2i(i % Monde.TAILLE_MORCEAU, i / Monde.TAILLE_MORCEAU)
 		sol.erase_cell(c)
 		_arbres.erase(c)
+		_decos.erase(c)
 	for l in _conteneurs[cle].find_children("*", "PointLight2D", true, false):
 		_lumieres.erase(l)
 	_transparents.clear()
@@ -139,7 +174,7 @@ func morceaux_affiches() -> Array:
 	return _conteneurs.keys()
 
 
-func _ajouter_feu(parent: Node2D, pied: Vector2) -> void:
+func _ajouter_feu(parent: Node2D, pied: Vector2) -> Node:
 	var frames := SpriteFrames.new()
 	frames.set_animation_speed("default", 8)
 	for f in 4:
@@ -160,6 +195,7 @@ func _ajouter_feu(parent: Node2D, pied: Vector2) -> void:
 	lum.position = Vector2(0, -10)
 	feu.add_child(lum)
 	_lumieres.append(lum)
+	return feu
 
 
 ## Rend transparents les arbres qui cachent ce point (le joueur local).

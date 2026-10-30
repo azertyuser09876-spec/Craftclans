@@ -349,7 +349,12 @@ func _onglet_monde() -> Control:
 			serveur.combat.retirer_mannequins()
 			serveur.combat.mannequins_par_defaut()),
 	]))
-	var aide := _label("Les triches par joueur se règlent dans l'onglet Joueurs ou avec les commandes (onglet Console).")
+	v.add_child(_ligne([
+		_bouton("Retirer les sacs et corps au sol", func():
+			serveur.journal("%d sac(s) retiré(s)." % serveur.recolte.retirer_tous_les_sacs())),
+	]))
+	var aide := _label("Les triches par joueur se règlent dans l'onglet Joueurs ou avec les commandes (onglet Console).\n"
+		+ "Donner des objets : donner <joueur> <objet> [nombre] ; voir l'inventaire : inventaire <joueur>.")
 	aide.modulate.a = 0.6
 	v.add_child(aide)
 	v.add_child(_titre("Remise à zéro"))

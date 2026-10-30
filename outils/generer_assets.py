@@ -457,7 +457,7 @@ def generer_interface():
 
 # ---------------------------------------------------------------- Étape 1 : rôles et combat
 
-ROLES = ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin"]
+ROLES = ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin", "mineur"]
 C = (28, 24, 30, 255)  # contour
 
 
@@ -519,6 +519,18 @@ def dessiner_accessoire(d, ox, oy, direction, etape, role):
         else:
             d.rectangle([ox + 9, y0 + 5, ox + 23, y0 + 9], fill=capuche)
         d.polygon([(ox + 9, y0 + 13), (ox + 23, y0 + 13), (ox + 25, y0 + 24), (ox + 7, y0 + 24)], fill=(46, 42, 56, 160))
+    elif role == "mineur":
+        jaune, lampe = (230, 190, 50, 255), (255, 250, 200, 255)
+        d.rounded_rectangle([ox + 8, y0 - 1, ox + 24, y0 + 7], radius=5, fill=jaune, outline=C)
+        d.rectangle([ox + 7, y0 + 5, ox + 25, y0 + 7], fill=(200, 160, 40, 255), outline=C)
+        if face:
+            d.ellipse([ox + 13, y0 - 1, ox + 19, y0 + 4], fill=lampe, outline=C)
+        elif direction in (1, 2):
+            x = ox + 8 if direction == 1 else ox + 21
+            d.ellipse([x, y0 + 0, x + 4, y0 + 4], fill=lampe, outline=C)
+        # bretelles
+        d.line([(ox + 12, y0 + 13), (ox + 12, y0 + 22)], fill=(90, 70, 50, 255), width=2)
+        d.line([(ox + 20, y0 + 13), (ox + 20, y0 + 22)], fill=(90, 70, 50, 255), width=2)
 
 
 def generer_roles():
@@ -569,6 +581,12 @@ def generer_armes():
     d.rectangle([0, 3, 5, 5], fill=(40, 36, 46, 255), outline=C)
     d.polygon([(6, 2), (16, 3), (19, 4), (16, 5), (6, 6)], fill=(150, 60, 200, 255), outline=C)
     armes["assassin"] = img
+    # pioche
+    img = Image.new("RGBA", (28, 24)); d = ImageDraw.Draw(img)
+    d.line([(0, 12), (22, 12)], fill=(110, 70, 40, 255), width=3)
+    d.polygon([(18, 1), (23, 6), (27, 12), (23, 18), (18, 23), (21, 12)], fill=(150, 156, 170, 255), outline=C)
+    d.line([(21, 4), (24, 12)], fill=(200, 205, 215, 255))
+    armes["mineur"] = img
     for role, img in armes.items():
         img.save(chemin("armes", f"{role}.png"))
 
@@ -644,7 +662,8 @@ def generer_combat():
 def icone_role(role, taille=48):
     img = Image.new("RGBA", (taille, taille)); d = ImageDraw.Draw(img)
     fonds = {"guerrier": (160, 60, 50), "archer": (60, 120, 60), "mage": (100, 60, 160),
-             "explorateur": (180, 120, 50), "paladin": (190, 160, 60), "assassin": (60, 56, 76)}
+             "explorateur": (180, 120, 50), "paladin": (190, 160, 60), "assassin": (60, 56, 76),
+             "mineur": (110, 96, 84)}
     d.rounded_rectangle([1, 1, taille - 2, taille - 2], radius=10, fill=fonds[role] + (255,), outline=(20, 20, 26, 255), width=2)
     arme = Image.open(chemin("armes", f"{role}.png"))
     arme = arme.resize((arme.width * 2 if arme.width < 24 else arme.width, arme.height * 2 if arme.width < 24 else arme.height), Image.NEAREST)
@@ -674,6 +693,102 @@ def generer_icones():
     img.save(chemin("ui", "competence.png"))
 
 
+# ---------------------------------------------------------------- Étape 3 : ressources et inventaire
+
+MINERAIS = {  # id : (couleur, reflet)
+    "cuivre": ((206, 118, 60), (250, 180, 120)),
+    "fer": ((176, 150, 130), (230, 214, 200)),
+    "or": ((236, 190, 50), (255, 240, 150)),
+    "mithril": ((110, 200, 220), (210, 250, 255)),
+}
+
+
+def generer_filons():
+    for nom, (coul, reflet) in MINERAIS.items():
+        roc = Image.open(chemin("decors", "rocher.png")).convert("RGBA")
+        d = ImageDraw.Draw(roc)
+        rng = random.Random(len(nom) * 13)
+        for (x, y) in ((10, 12), (19, 8), (24, 16), (14, 19), (27, 10)):
+            x += rng.randrange(-1, 2); y += rng.randrange(-1, 2)
+            d.polygon([(x, y - 2), (x + 2, y), (x, y + 2), (x - 2, y)], fill=coul + (255,), outline=(40, 36, 40, 255))
+            d.point((x - 1, y - 1), fill=reflet + (255,))
+        roc.save(chemin("decors", f"filon_{nom}.png"))
+    # cristaux
+    img = Image.new("RGBA", (32, 40)); d = ImageDraw.Draw(img)
+    ombre(d, 16, 36, 13, 3)
+    for (x, h, w, c) in ((9, 20, 5, (170, 90, 230)), (22, 18, 5, (150, 80, 220)), (16, 30, 6, (200, 130, 255))):
+        pts = [(x - w, 37), (x - w, 37 - h + 6), (x, 37 - h), (x + w, 37 - h + 6), (x + w, 37)]
+        d.polygon(pts, fill=c + (255,), outline=(50, 24, 70, 255))
+        d.line([(x - 1, 37 - h + 4), (x - 1, 34)], fill=(240, 220, 255, 255))
+    img.save(chemin("decors", "cristal.png"))
+
+
+def icone_objet(nom):
+    img = Image.new("RGBA", (24, 24)); d = ImageDraw.Draw(img)
+    if nom == "bois":
+        for i, y in enumerate((14, 8)):
+            d.rounded_rectangle([3 + i * 2, y, 21 - i * 2, y + 6], radius=3, fill=(150, 100, 56, 255), outline=C)
+            d.ellipse([16 - i * 2, y, 22 - i * 2, y + 6], fill=(214, 170, 110, 255), outline=C)
+    elif nom == "fibre":
+        for x in (8, 12, 16):
+            d.line([(x, 21), (x + 2, 4)], fill=(120, 170, 70, 255), width=2)
+        d.rectangle([7, 12, 19, 14], fill=(200, 170, 90, 255), outline=C)
+    elif nom == "herbe":
+        d.line([(12, 21), (12, 9)], fill=(70, 140, 60, 255), width=2)
+        for (x, y) in ((7, 10), (17, 10), (12, 5)):
+            d.ellipse([x - 4, y - 3, x + 4, y + 3], fill=(90, 190, 90, 255), outline=C)
+        d.ellipse([10, 3, 14, 7], fill=(240, 120, 200, 255))
+    elif nom == "os":
+        d.line([(6, 18), (18, 6)], fill=(236, 228, 206, 255), width=4)
+        for (x, y) in ((4, 17), (7, 20), (17, 4), (20, 7)):
+            d.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(236, 228, 206, 255), outline=C)
+    elif nom == "pierre":
+        d.polygon([(3, 18), (6, 8), (14, 4), (21, 9), (20, 19), (11, 21)], fill=(130, 130, 140, 255), outline=C)
+        d.polygon([(7, 9), (14, 5), (18, 9), (12, 12)], fill=(170, 170, 180, 255))
+    elif nom == "obsidienne":
+        d.polygon([(4, 16), (9, 4), (19, 6), (21, 17), (12, 21)], fill=(40, 26, 50, 255), outline=(10, 6, 14, 255))
+        d.line([(9, 7), (12, 16)], fill=(150, 110, 200, 255))
+    elif nom == "cristal":
+        d.polygon([(12, 2), (18, 9), (12, 22), (6, 9)], fill=(190, 120, 250, 255), outline=(50, 24, 70, 255))
+        d.line([(10, 8), (12, 18)], fill=(240, 220, 255, 255))
+    else:  # minerais : pépites
+        coul, reflet = MINERAIS[nom]
+        d.polygon([(4, 14), (8, 6), (16, 4), (21, 11), (18, 19), (8, 20)], fill=coul + (255,), outline=C)
+        d.polygon([(8, 8), (14, 6), (13, 11)], fill=reflet + (255,))
+    return img
+
+
+def generer_objets():
+    for nom in ("bois", "fibre", "herbe", "os", "pierre", "obsidienne", "cristal", *MINERAIS.keys()):
+        icone_objet(nom).save(chemin("objets", f"{nom}.png"))
+    # sac au sol
+    img = Image.new("RGBA", (24, 24)); d = ImageDraw.Draw(img)
+    ombre(d, 12, 21, 9, 2)
+    d.rounded_rectangle([4, 8, 20, 21], radius=5, fill=(160, 120, 70, 255), outline=C)
+    d.polygon([(8, 9), (12, 3), (16, 9)], fill=(140, 100, 56, 255), outline=C)
+    d.line([(7, 9), (17, 9)], fill=(90, 60, 30, 255), width=2)
+    img.save(chemin("objets", "sac.png"))
+    # corps : sac et crâne
+    img = Image.new("RGBA", (30, 26)); d = ImageDraw.Draw(img)
+    ombre(d, 15, 23, 13, 3)
+    d.rounded_rectangle([2, 10, 18, 23], radius=5, fill=(150, 110, 64, 255), outline=C)
+    d.ellipse([15, 9, 27, 20], fill=(236, 230, 214, 255), outline=C)
+    d.rectangle([18, 18, 24, 22], fill=(236, 230, 214, 255), outline=C)
+    d.rectangle([17, 13, 19, 15], fill=C); d.rectangle([23, 13, 25, 15], fill=C)
+    img.save(chemin("objets", "corps.png"))
+    # boutons : inventaire (sac) et main (récolter / ramasser)
+    img = Image.new("RGBA", (48, 48)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([1, 1, 46, 46], radius=10, fill=(120, 90, 56, 255), outline=(20, 20, 26, 255), width=2)
+    sac = Image.open(chemin("objets", "sac.png")).resize((36, 36), Image.NEAREST)
+    img.paste(sac, (6, 4), sac)
+    img.save(chemin("ui", "inventaire.png"))
+    img = Image.new("RGBA", (48, 48)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([1, 1, 46, 46], radius=10, fill=(70, 120, 80, 255), outline=(20, 20, 26, 255), width=2)
+    pioche = Image.open(chemin("armes", "mineur.png")).resize((40, 34), Image.NEAREST).rotate(30, expand=True, resample=Image.NEAREST)
+    img.paste(pioche, ((48 - pioche.width) // 2, (48 - pioche.height) // 2), pioche)
+    img.save(chemin("ui", "recolter.png"))
+
+
 if __name__ == "__main__":
     generer_sols()
     generer_arbre()
@@ -689,4 +804,6 @@ if __name__ == "__main__":
     generer_armes()
     generer_combat()
     generer_icones()
+    generer_filons()
+    generer_objets()
     print("Assets générés dans", os.path.abspath(os.path.join(RACINE, "assets")))

@@ -15,6 +15,7 @@ var sauvegarde := Sauvegarde.new()
 var monde: Monde
 var commandes: Commandes
 var combat: Combat
+var recolte: Recolte
 var actif := false
 var demarre_le := 0
 var derniere_sauvegarde := ""
@@ -50,6 +51,8 @@ func _ready() -> void:
 	_creer_monde()
 	combat = Combat.new(self)
 	combat.mannequins_par_defaut()
+	recolte = Recolte.new(self)
+	recolte.charger(donnees)
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
@@ -119,6 +122,8 @@ func _creer_monde() -> void:
 	cartes.clear()
 	for cle in sauvegarde.morceaux_sauvegardes():
 		var m := sauvegarde.charger_morceau(cle)
+		if m.is_empty():
+			m = monde.morceau(cle) # ancien morceau : régénéré (et sauvegardé) avec les minerais
 		if not m.is_empty():
 			cartes[cle] = Monde.image_carte(m)
 	journal("Monde : %d morceaux déjà explorés." % cartes.size())
@@ -175,6 +180,7 @@ func _physics_process(delta: float) -> void:
 	for s in joueurs.values():
 		s.budget = minf(s.budget + 60.0 * delta, 30.0)
 	combat.tick(delta)
+	recolte.tick(delta)
 	var heure: float = donnees.heure + delta * 24.0 / Config.DUREE_JOURNEE * float(donnees.reglages.vitesse_temps)
 	donnees.heure = fmod(heure, 24.0)
 	_accu_etat += delta
@@ -219,6 +225,7 @@ func sauver() -> void:
 		return
 	for s in joueurs.values():
 		_memoriser(s)
+	recolte.enregistrer(donnees)
 	if sauvegarde.enregistrer(donnees):
 		derniere_sauvegarde = Time.get_time_string_from_system()
 	else:
@@ -231,6 +238,7 @@ func _memoriser(s: Dictionary) -> void:
 	fiche["apparence"] = s.apparence
 	fiche["role"] = s.role
 	fiche["equipe"] = s.equipe
+	recolte.memoriser(s, fiche)
 	fiche["vu_le"] = Time.get_datetime_string_from_system(false, true)
 	donnees.joueurs[s.nom] = fiche
 
@@ -315,6 +323,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 		"vitesse": 1.0, "vol": false, "dieu": false, "mvt": Regles.nouvel_etat(pos),
 	}
 	combat.preparer_session(s, fiche)
+	recolte.preparer_session(s, fiche)
 	joueurs[id] = s
 	var autres := {}
 	for autre_id in joueurs:
@@ -327,6 +336,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 		"nouveau": nouveau,
 	})
 	envoyer_reglages(id)
+	recolte.accueillir(s)
 	for autre_id in joueurs:
 		if autre_id != id:
 			Reseau.s_joueur.rpc_id(autre_id, id, _infos_publiques(s))
@@ -365,6 +375,24 @@ func sur_action(id: int, genre: String, cible: Vector2, charge: float) -> void:
 	var s: Dictionary = joueurs.get(id, {})
 	if not s.is_empty():
 		combat.action(s, genre, cible, charge)
+
+
+func sur_recolter(id: int, actif: bool, c: Vector2i) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		recolte.sur_recolter(s, actif, c)
+
+
+func sur_ramasser(id: int, sac: int) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		recolte.sur_ramasser(s, sac)
+
+
+func sur_jeter(id: int, case: int) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		recolte.sur_jeter(s, case)
 
 
 func sur_role(id: int, role: String) -> void:
@@ -522,6 +550,7 @@ func reinitialiser_monde() -> void:
 		donnees.joueurs[nom] = {"jeton": anciens[nom].get("jeton", ""), "admin": anciens[nom].get("admin", false)}
 	donnees.bannis = bannis
 	_creer_monde()
+	recolte.charger(donnees)
 	combat.retirer_mannequins()
 	combat.mannequins_par_defaut()
 	sauver()

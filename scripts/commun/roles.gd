@@ -53,9 +53,16 @@ const LISTE := {
 		"attaque": {"nom": "Dagues", "genre": "melee", "degats": 17, "portee": 40.0, "angle": 90.0, "recharge": 0.4, "dos": 2.0},
 		"competence": {"nom": "Ombre", "genre": "buff", "effet": "ombre", "duree": 3.5, "bonus": 1.0, "recharge": 12.0},
 	},
+	"mineur": {
+		"nom": "Mineur", "vie": 125, "vitesse": 1.0, "esquive": 2.5, "minage": 2.5,
+		"description": "Mine les rochers et les filons 2,5 fois plus vite.",
+		"attaque": {"nom": "Coup de pioche", "genre": "melee", "degats": 18, "portee": 44.0, "angle": 100.0, "recharge": 0.6},
+		"competence": {"nom": "Ruée minière", "genre": "buff", "effet": "ruee", "duree": 8.0, "bonus": 0.2, "recharge": 20.0,
+			"description": "Pendant 8 s : récolte 2 fois plus rapide et +20 % de vitesse."},
+	},
 }
 
-const ORDRE := ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin"]
+const ORDRE := ["guerrier", "archer", "mage", "explorateur", "paladin", "assassin", "mineur"]
 
 
 static func donnees(role: String) -> Dictionary:

@@ -44,6 +44,8 @@ static func monde_vierge() -> Dictionary:
 		"joueurs": {}, # par pseudo
 		"bannis": {}, # pseudo -> raison
 		"boss": {}, # id -> état
+		"sacs": [], # objets au sol et corps des joueurs morts
+		"repousses": [], # [x, y, décor, secondes restantes] des décors récoltés
 		"reglages": {"mode_dev": false, "cheats": true, "vitesse_temps": 1.0, "pvp": true},
 	}
 
@@ -109,6 +111,9 @@ func charger_morceau(cle: Vector2i) -> Dictionary:
 	if f == null:
 		return {}
 	var generateur := f.get_8()
+	if generateur < 2:
+		# Morceau d'avant les minerais : personne n'a pu le modifier, on le régénère.
+		return {}
 	var m := Monde.deballer(f.get_buffer(f.get_length() - 1))
 	if not m.is_empty():
 		m["generateur"] = generateur

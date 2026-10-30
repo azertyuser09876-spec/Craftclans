@@ -12,7 +12,8 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 | 2 | La carte : monde infini par morceaux, 10 biomes, danger selon la distance, minicarte et grande carte | ✅ v0.2.0 |
 | 2.1 | Correctif réseau : IPv6, essai IPv6 puis IPv4, adresses à donner dans le panneau, pare-feu | ✅ v0.2.1 |
 | 2.2 | Test de connexion et réparation du pare-feu dans le panneau, minicarte qui ne déborde plus | ✅ v0.2.2 |
-| 3 | Ressources, inventaire, mort | à venir |
+| 3 | Ressources : récolte, minerais selon le danger, rôle Mineur, inventaire, mort (tout tombe sur le corps, pillable) | ✅ v0.3.0 |
+| 4 | Craft et équipement | à venir |
 | … | voir la feuille de route du document de conception | |
 
 ## Jouer
@@ -33,16 +34,18 @@ scripts/commun/   partagé par le jeu et le serveur
   monde.gd          monde infini : morceaux de 32×32 cases générés depuis la graine, biomes, danger, collisions
   regles.gd         règles de déplacement (appliquées par le serveur, prédites par le jeu)
   roles.gd          les rôles et leurs capacités (vie, dégâts, portées, recharges)
+  objets.gd         objets, ressources données par chaque décor, règles d'inventaire
   donnees_boss.gd   liste des boss mondiaux
 scripts/serveur/  serveur dédié
   serveur.gd        logique du serveur (il fait autorité sur tout)
   sauvegarde.gd     sauvegarde versionnée, migrations, archives, copies de secours
   combat.gd         vie, dégâts, projectiles, zones, effets, mort et réapparition
   commandes.gd      commandes admin, triches, boss (console et chat /aide)
+  recolte.gd        récolte, repousse des décors, inventaires, sacs au sol et corps
   panneau_admin.gd  fenêtre de gestion du serveur
 scripts/client/   le jeu
   menu.gd, jeu.gd, vue_monde.gd, carte_vue.gd (minicarte et grande carte), joueur_visuel.gd, joystick.gd, theme_jeu.gd,
-  effets.gd, barre_combat.gd, mannequin_visuel.gd
+  effets.gd, barre_combat.gd, mannequin_visuel.gd, inventaire_vue.gd
 assets/           images (générées par outils/generer_assets.py)
 distribution/     fichiers ajoutés aux zips (lisez-moi, .bat du serveur)
 outils/           générateur d'assets, script de version
@@ -75,7 +78,9 @@ Le monde est infini et découpé en morceaux de 32×32 cases. **Seul le serveur 
 et envoie au jeu les morceaux autour de chaque joueur. Chaque morceau visité est enregistré dans
 `monde\morceaux\x_y.bin` : il ne change plus, même si le générateur change dans une future version.
 Le danger (0 à 10) augmente avec la distance au feu de camp de départ ; les vallées paisibles sont plus calmes,
-les terres brûlées toujours dangereuses.
+les terres brûlées toujours dangereuses. Une partie des rochers sont des filons : cuivre partout, fer dès le danger 2,
+or dès 4, mithril dès 6, cristal dès 8 (`Monde._filon`). Un décor récolté est enregistré dans son morceau
+et repousse plus tard (`Objets.RECOLTE`).
 
 ## Publier une version
 
@@ -105,6 +110,6 @@ python outils/generer_assets.py
 
 ## Options de test
 
-`--auto-connexion=Pseudo@adresse`, `--auto-deplacement`, `--auto-commande="/heure 21;/devmode oui"`,
+`--auto-connexion=Pseudo@adresse`, `--auto-deplacement`, `--auto-recolte`, `--auto-commande="/heure 21;@5 /devmode oui"` (`@5` : après 5 s),
 `--capture=fichier.png:secondes`, `--port=8001`, `--tactile` (interface téléphone sur PC),
 `--onglet=N` (serveur : ouvre un onglet du panneau).

@@ -65,6 +65,20 @@ var _a_afficher: Array = [] # morceaux reçus, affichés petit à petit
 var _accu_morceaux := 0.0
 const RAYON_GARDE := 4 # morceaux gardés autour du joueur (le serveur envoie dans un rayon de 2)
 
+# Ressources et inventaire
+const TEX_SAC := preload("res://assets/objets/sac.png")
+const TEX_CORPS := preload("res://assets/objets/corps.png")
+var inventaire: Array = []
+var sacs := {} # id -> {infos, noeud}
+var _inventaire_vue: InventaireVue
+var _cible := {} # ce qu'on peut récolter ou ramasser : {genre: "deco"|"sac", case|id, pos}
+var _invite: Label
+var _bouton_recolter: Button
+var _bouton_tenu := false
+var _recolte_envoyee := false
+var _recolte_case := Vector2i.ZERO
+var _recolte_progres := -1.0
+
 
 func _ready() -> void:
 	mon_id = int(infos.id)
@@ -113,16 +127,32 @@ func _ready() -> void:
 	Reseau.deconnecte.connect(_sur_deconnexion)
 	Reseau.pong.connect(func(ms): _ping = ms)
 	Reseau.morceau_recu.connect(_sur_morceau)
+	Reseau.case_changee.connect(_sur_case)
+	Reseau.inventaire_recu.connect(func(inv):
+		inventaire = inv
+		_inventaire_vue.afficher(inv))
+	Reseau.recolte_recue.connect(func(p, _c): _recolte_progres = p)
+	Reseau.sacs_recus.connect(func(liste):
+		for infos_sac in liste:
+			_ajouter_sac(infos_sac))
+	Reseau.sac_recu.connect(_ajouter_sac)
+	Reseau.sac_retire.connect(_retirer_sac)
 	RenderingServer.set_default_clear_color(Color(0.08, 0.1, 0.09))
 	if infos.get("nouveau", false) and Config.auto_connexion == "":
 		_choix_role.visible = true
 	if Config.auto_commande != "":
+		# « @5 /commande » : envoyée 5 secondes après l'arrivée (pour les tests).
 		for c in Config.auto_commande.split(";"):
-			Reseau.c_chat.rpc_id(1, c)
+			var delai := 0.0
+			if c.begins_with("@"):
+				delai = float(c.get_slice(" ", 0).substr(1))
+				c = c.substr(c.find(" ") + 1)
+			get_tree().create_timer(delai).timeout.connect(Reseau.c_chat.rpc_id.bind(1, c))
 
 
 func _en_jeu() -> bool:
-	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible and not _grande_carte.visible
+	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible \
+		and not _grande_carte.visible and not _inventaire_vue.visible
 
 
 # ------------------------------------------------------------------ Boucle
@@ -196,6 +226,7 @@ func _process(delta: float) -> void:
 		_accu_ping = 0.0
 		Reseau.c_ping.rpc_id(1, Time.get_ticks_msec())
 	_maj_combat()
+	_maj_interaction(delta)
 	_maj_lieu()
 	_info.text = "Craftclans %s  |  %d joueur(s)  |  ping %d ms  |  %02d:%02d%s" % [
 		Config.version, autres.size() + 1, _ping, int(heure), int(fmod(heure, 1.0) * 60),
@@ -222,6 +253,9 @@ func _maj_lieu() -> void:
 	var marqueurs := [[_mvt.pos, Color.WHITE]]
 	for a in autres.values():
 		marqueurs.append([a.position, Color(0.5, 1, 0.5) if a.allie else Color(1, 0.4, 0.35)])
+	for s in sacs.values():
+		if s.infos.genre == "corps":
+			marqueurs.append([s.infos.pos, Color(1, 0.6, 0.15) if s.infos.nom == infos.nom else Color(0.75, 0.75, 0.75)])
 	for carte in [_minicarte, _grande_carte]:
 		if carte.visible:
 			carte.centre = _mvt.pos
@@ -266,10 +300,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			_choix_role.visible = false
 		elif _grande_carte.visible:
 			_grande_carte.visible = false
+		elif _inventaire_vue.visible:
+			_inventaire_vue.visible = false
 		else:
 			_menu_pause.visible = not _menu_pause.visible
+	elif event.is_action_pressed("inventaire") and not _saisie.has_focus() and not _menu_pause.visible:
+		_inventaire_vue.visible = not _inventaire_vue.visible
+		get_viewport().set_input_as_handled()
 	elif not _en_jeu() or _visee_tactile:
 		return
+	elif event.is_action_pressed("interagir"):
+		_interagir()
 	elif event.is_action_pressed("role"):
 		_choix_role.visible = true
 	elif event.is_action_pressed("carte"):
@@ -390,6 +431,7 @@ func _maj_combat() -> void:
 
 
 func _dessiner_visee() -> void:
+	_dessiner_recolte()
 	if _visee_genre == "" or moi.est_mort():
 		return
 	var cap := _capacite(_visee_genre)
@@ -583,6 +625,8 @@ func _sur_evenement(genre: String, d: Dictionary) -> void:
 			var v := _visuel(int(d.id))
 			if v and d.effet == "sprint":
 				effets.anneau(v.position, 24.0, Color(0.6, 0.9, 1, 0.9))
+			elif v and d.effet == "ruee":
+				effets.anneau(v.position, 26.0, Color(1, 0.8, 0.3, 0.9))
 		"degats":
 			var cle := str(d.cle)
 			var sur_moi := cle == "j%d" % mon_id
@@ -599,10 +643,144 @@ func _sur_evenement(genre: String, d: Dictionary) -> void:
 			effets.explosion(d.pos, "impact", 1.2)
 		"mannequin":
 			_ajouter_mannequin(int(d.id), d.pos, int(d.vie), int(d.max))
+		"recolte":
+			var v := _visuel(int(d.id))
+			if v:
+				v.geste(float(d.angle))
+			effets.explosion(d.pos + Vector2(0, -8), "impact", 0.35)
+			if int(d.id) == mon_id:
+				var info := Objets.infos(str(d.objet))
+				effets.texte(d.pos, "+1 %s" % info.nom, Objets.COULEURS_RARETE[int(info.rarete)])
+		"ramasser":
+			if int(d.id) == mon_id:
+				var parts := []
+				for id_objet in d.objets:
+					parts.append("+%d %s" % [d.objets[id_objet], Objets.infos(id_objet).nom])
+				effets.texte(d.pos, ", ".join(PackedStringArray(parts)), Color(1, 0.95, 0.6))
 		"mannequin_retire":
 			if mannequins.has(int(d.id)):
 				mannequins[int(d.id)].queue_free()
 				mannequins.erase(int(d.id))
+
+
+# ------------------------------------------------------------------ Ressources, sacs et corps
+
+func _sur_case(c: Vector2i, deco: int) -> void:
+	if monde.changer_deco(c.x, c.y, deco):
+		vue.changer_case(c)
+
+
+func _ajouter_sac(i: Dictionary) -> void:
+	_retirer_sac(int(i.id))
+	var n := Node2D.new()
+	n.position = i.pos
+	var spr := Sprite2D.new()
+	spr.texture = TEX_CORPS if i.genre == "corps" else TEX_SAC
+	spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 3)
+	n.add_child(spr)
+	if i.genre == "corps":
+		var l := Label.new()
+		l.text = "Ton corps" if i.nom == infos.nom else "Corps de %s" % i.nom
+		l.position = Vector2(-60, -36)
+		l.custom_minimum_size = Vector2(120, 0)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_font_size_override("font_size", 9)
+		l.add_theme_constant_override("outline_size", 3)
+		l.add_theme_color_override("font_color", Color(1, 0.7, 0.4) if i.nom == infos.nom else Color(0.85, 0.85, 0.85))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		n.add_child(l)
+	vue.objets.add_child(n)
+	sacs[int(i.id)] = {"infos": i, "noeud": n}
+
+
+func _retirer_sac(id: int) -> void:
+	if sacs.has(id):
+		sacs[id].noeud.queue_free()
+		sacs.erase(id)
+
+
+## Cherche ce que le joueur peut ramasser (en priorité) ou récolter à côté de lui.
+func _chercher_cible() -> Dictionary:
+	if moi.est_mort():
+		return {}
+	var meilleur := {}
+	var meilleure_dist := Objets.PORTEE_RAMASSER
+	for s in sacs.values():
+		var d: float = _mvt.pos.distance_to(s.infos.pos)
+		if d <= meilleure_dist:
+			meilleure_dist = d
+			meilleur = {"genre": "sac", "id": int(s.infos.id), "pos": s.infos.pos, "infos": s.infos}
+	if not meilleur.is_empty():
+		return meilleur
+	meilleure_dist = Objets.PORTEE_RECOLTE
+	var c0 := Vector2i((_mvt.pos / Config.TAILLE_TUILE).floor())
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			var c := c0 + Vector2i(dx, dy)
+			var deco := monde.deco_en(c.x, c.y)
+			if not Objets.recoltable(deco):
+				continue
+			var centre := VueMonde.centre_case(c)
+			var d: float = _mvt.pos.distance_to(centre)
+			# Préfère légèrement ce qui est devant le joueur.
+			d -= maxf(0.0, (centre - _mvt.pos).normalized().dot(_mvt.regard)) * 6.0
+			if d <= meilleure_dist:
+				meilleure_dist = d
+				meilleur = {"genre": "deco", "case": c, "pos": centre, "deco": deco}
+	return meilleur
+
+
+func _interagir() -> void:
+	if _cible.get("genre", "") == "sac":
+		Reseau.c_ramasser.rpc_id(1, int(_cible.id))
+
+
+func _maj_interaction(delta: float) -> void:
+	_cible = _chercher_cible() if _en_jeu() or _bouton_tenu else {}
+	var tenu := _bouton_tenu or Config.auto_recolte or (_en_jeu() and Input.is_action_pressed("interagir"))
+	var vise_deco: bool = _cible.get("genre", "") == "deco"
+	if Config.auto_recolte and _cible.get("genre", "") == "sac" and Engine.get_process_frames() % 30 == 0:
+		_interagir()
+	if tenu and vise_deco and not moi.est_mort():
+		if not _recolte_envoyee or _recolte_case != _cible.case:
+			Reseau.c_recolter.rpc_id(1, true, _cible.case)
+			_recolte_envoyee = true
+			_recolte_case = _cible.case
+			_recolte_progres = 0.0
+	elif _recolte_envoyee:
+		Reseau.c_recolter.rpc_id(1, false, Vector2i.ZERO)
+		_recolte_envoyee = false
+		_recolte_progres = -1.0
+	# Barre de progression lissée entre deux messages du serveur.
+	if _recolte_envoyee and _recolte_progres >= 0.0 and Objets.recoltable(monde.deco_en(_recolte_case.x, _recolte_case.y)):
+		var duree := Objets.duree_recolte(monde.deco_en(_recolte_case.x, _recolte_case.y), reglages.role, moi.drapeaux & 16 != 0)
+		_recolte_progres = minf(_recolte_progres + delta / duree, 1.0)
+	# Invite au-dessus de la cible
+	var touche := "" if Config.est_mobile() else "F : "
+	_invite.visible = not _cible.is_empty()
+	if _bouton_recolter:
+		_bouton_recolter.visible = not _cible.is_empty() or _bouton_tenu
+	if _cible.is_empty():
+		return
+	if _cible.genre == "sac":
+		var i: Dictionary = _cible.infos
+		var quoi := "le sac (%d objets)" % int(i.n)
+		if i.genre == "corps":
+			quoi = "tes affaires" if i.nom == infos.nom else "le corps de %s (%d objets)" % [i.nom, int(i.n)]
+		_invite.text = "%sRamasser %s" % [touche, quoi]
+	else:
+		var r: Dictionary = Objets.RECOLTE[_cible.deco]
+		_invite.text = "%s%s (%s)" % [touche, r.verbe, Objets.infos(r.objet).nom]
+	_invite.position = _cible.pos + Vector2(-100, -62)
+
+
+func _dessiner_recolte() -> void:
+	if not _recolte_envoyee or _recolte_progres < 0.0:
+		return
+	var centre := VueMonde.centre_case(_recolte_case) + Vector2(-14, -40)
+	var r := Rect2(centre, Vector2(28, 4))
+	_dessin_visee.draw_rect(r.grow(1), Color(0, 0, 0, 0.75))
+	_dessin_visee.draw_rect(Rect2(r.position, Vector2(28 * _recolte_progres, 4)), Color(1, 0.85, 0.35))
 
 
 func _sur_deconnexion(raison: String) -> void:
@@ -726,6 +904,45 @@ func _creer_interface() -> void:
 
 	_creer_choix_role()
 
+	var centre := CenterContainer.new()
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.add_child(centre)
+	_inventaire_vue = InventaireVue.new()
+	_inventaire_vue.visible = false
+	_inventaire_vue.jeter.connect(func(c): Reseau.c_jeter.rpc_id(1, c))
+	centre.add_child(_inventaire_vue)
+	_invite = Label.new()
+	_invite.z_index = 30
+	_invite.custom_minimum_size = Vector2(200, 0)
+	_invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_invite.add_theme_font_size_override("font_size", 11)
+	_invite.add_theme_constant_override("outline_size", 4)
+	_invite.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_invite.visible = false
+	vue.add_child(_invite)
+	if Config.est_mobile():
+		_bouton_recolter = Button.new()
+		_bouton_recolter.icon = preload("res://assets/ui/recolter.png")
+		_bouton_recolter.expand_icon = true
+		_bouton_recolter.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		_bouton_recolter.position = Vector2(-300, -250)
+		_bouton_recolter.custom_minimum_size = Vector2(84, 84)
+		_bouton_recolter.button_down.connect(func():
+			_bouton_tenu = true
+			_interagir())
+		_bouton_recolter.button_up.connect(func(): _bouton_tenu = false)
+		_bouton_recolter.visible = false
+		_ui.add_child(_bouton_recolter)
+		var bouton_sac := Button.new()
+		bouton_sac.icon = preload("res://assets/ui/inventaire.png")
+		bouton_sac.expand_icon = true
+		bouton_sac.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		bouton_sac.position = Vector2(-370, 10)
+		bouton_sac.custom_minimum_size = Vector2(60, 56)
+		bouton_sac.pressed.connect(func(): _inventaire_vue.visible = not _inventaire_vue.visible)
+		_ui.add_child(bouton_sac)
+
 	_lieu = Label.new()
 	_lieu.position = Vector2(12, 30)
 	_lieu.add_theme_font_size_override("font_size", 15)
@@ -784,7 +1001,7 @@ func _creer_interface() -> void:
 		_choix_role.visible = true)
 	vb.add_child(changer)
 	var aide := Label.new()
-	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte\nEntrée : chat (/aide)    F3 : infos développeur"
+	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire\nEntrée : chat (/aide)    F3 : infos développeur"
 	aide.add_theme_font_size_override("font_size", 14)
 	aide.modulate.a = 0.7
 	vb.add_child(aide)
@@ -806,14 +1023,14 @@ func _creer_choix_role() -> void:
 	titre.add_theme_font_size_override("font_size", 26)
 	vb.add_child(titre)
 	var grille := GridContainer.new()
-	grille.columns = 3
+	grille.columns = 4
 	grille.add_theme_constant_override("h_separation", 10)
 	grille.add_theme_constant_override("v_separation", 10)
 	vb.add_child(grille)
 	for role in Roles.ORDRE:
 		var d: Dictionary = Roles.LISTE[role]
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(285, 150)
+		b.custom_minimum_size = Vector2(270, 140)
 		b.icon = load("res://assets/ui/role_%s.png" % role)
 		b.expand_icon = false
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -855,6 +1072,8 @@ const COULEURS := {
 
 
 func _ajouter_message(texte: String, genre: String) -> void:
+	if Config.auto_connexion != "":
+		print("[message] ", texte)
 	var l := Label.new()
 	l.text = texte
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

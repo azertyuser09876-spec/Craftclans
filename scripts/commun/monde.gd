@@ -8,13 +8,18 @@ extends RefCounted
 ## même si le générateur change dans une mise à jour.
 
 enum Sol { EAU, SABLE, HERBE, HERBE_FONCEE, TERRE, PIERRE, NEIGE, BOUE, CENDRE, HERBE_CLAIRE, LAVE }
-enum Deco { AUCUN, ARBRE, SAPIN, ROCHER, BUISSON, FLEURS, FEU, CACTUS, SAPIN_NEIGE, ARBRE_MORT, ROSEAUX, ROCHER_NOIR, OS }
+enum Deco { AUCUN, ARBRE, SAPIN, ROCHER, BUISSON, FLEURS, FEU, CACTUS, SAPIN_NEIGE, ARBRE_MORT, ROSEAUX, ROCHER_NOIR, OS,
+	FILON_CUIVRE, FILON_FER, FILON_OR, FILON_MITHRIL, CRISTAL }
 enum Biome { PRAIRIE, FORET, DESERT, TOUNDRA, MARAIS, MONTAGNE, LAC, PLAGE, VALLEE, BRULEES }
 
 const TAILLE_MORCEAU := 32
 const CASES := TAILLE_MORCEAU * TAILLE_MORCEAU
-const GENERATEUR := 1 # version du générateur, enregistrée avec chaque morceau
-const DECOS_BLOQUANTES := [Deco.ARBRE, Deco.SAPIN, Deco.ROCHER, Deco.FEU, Deco.CACTUS, Deco.SAPIN_NEIGE, Deco.ARBRE_MORT, Deco.ROCHER_NOIR]
+const GENERATEUR := 2 # version du générateur, enregistrée avec chaque morceau (2 : minerais)
+const DECOS_BLOQUANTES := [Deco.ARBRE, Deco.SAPIN, Deco.ROCHER, Deco.FEU, Deco.CACTUS, Deco.SAPIN_NEIGE, Deco.ARBRE_MORT,
+	Deco.ROCHER_NOIR, Deco.FILON_CUIVRE, Deco.FILON_FER, Deco.FILON_OR, Deco.FILON_MITHRIL, Deco.CRISTAL]
+## Couleur des filons sur les cartes.
+const COULEURS_FILONS := {Deco.FILON_CUIVRE: Color8(206, 118, 60), Deco.FILON_FER: Color8(190, 170, 150),
+	Deco.FILON_OR: Color8(240, 200, 60), Deco.FILON_MITHRIL: Color8(110, 210, 230), Deco.CRISTAL: Color8(200, 130, 255)}
 const SOLS_BLOQUANTS := [Sol.EAU, Sol.LAVE]
 const NOMS_BIOMES := ["Prairie", "Forêt", "Désert", "Toundra", "Marais", "Montagnes", "Lac", "Plage", "Vallée paisible", "Terres brûlées"]
 const DISTANCE_PAR_DANGER := 110.0 # cases à parcourir depuis le centre pour +1 de danger
@@ -129,11 +134,24 @@ func collision(pos: Vector2, rayon: float) -> bool:
 
 ## Danger d'une case : augmente avec la distance au centre, sauf dans les vallées paisibles.
 func danger_en(cx: int, cy: int) -> int:
-	var d := int(Vector2(cx, cy).length() / DISTANCE_PAR_DANGER)
-	match biome_en(cx, cy):
+	return danger(Vector2(cx, cy).length(), biome_en(cx, cy))
+
+
+static func danger(dist: float, b: int) -> int:
+	var d := int(dist / DISTANCE_PAR_DANGER)
+	match b:
 		Biome.VALLEE: d -= 3
 		Biome.BRULEES: d = maxi(d, 5)
 	return clampi(d, 0, DANGER_MAX)
+
+
+## Change le décor d'une case connue (récolte, repousse). Renvoie faux si le morceau n'est pas connu.
+func changer_deco(cx: int, cy: int, d: int) -> bool:
+	var m: Dictionary = morceaux.get(cle_de_case(cx, cy), {})
+	if m.is_empty():
+		return false
+	m.deco[_indice(cx, cy)] = d
+	return true
 
 
 func centre() -> Vector2:
@@ -271,7 +289,32 @@ func _case(cx: int, cy: int, r: float) -> Array:
 			elif r < 0.035: d = Deco.BUISSON
 			elif r < 0.08: d = Deco.FLEURS
 			elif r < 0.085: d = Deco.ROCHER
+	# Minerais : une partie des rochers sont des filons, plus rares et plus précieux avec le danger.
+	if d == Deco.ROCHER:
+		d = _filon(cx, cy, dist, b)
 	return [s, d, b]
+
+
+func _filon(cx: int, cy: int, dist: float, b: int) -> int:
+	var niveau := danger(dist, b)
+	var r := float(posmod(hash(Vector3i(cx, cy, graine)), 100000)) / 100000.0
+	var rocheux := b == Biome.MONTAGNE or b == Biome.TOUNDRA
+	var chaud := b == Biome.DESERT or b == Biome.MONTAGNE
+	# Du plus rare au plus commun : [décor, danger minimum, chance]
+	var table := [
+		[Deco.CRISTAL, 8, 0.08],
+		[Deco.FILON_MITHRIL, 6, 0.18 if rocheux else 0.10],
+		[Deco.FILON_OR, 4, 0.20 if chaud else 0.12],
+		[Deco.FILON_FER, 2, 0.22],
+		[Deco.FILON_CUIVRE, 0, 0.25],
+	]
+	var cumul := 0.0
+	for t in table:
+		if niveau >= t[1]:
+			cumul += t[2]
+			if r < cumul:
+				return t[0]
+	return Deco.ROCHER
 
 
 ## Image de carte d'un morceau (1 pixel par case).
@@ -281,6 +324,8 @@ static func image_carte(m: Dictionary) -> Image:
 		var c: Color = COULEURS[m.sol[i]]
 		if m.deco[i] in [Deco.ARBRE, Deco.SAPIN, Deco.SAPIN_NEIGE, Deco.CACTUS]:
 			c = c.darkened(0.35)
+		elif COULEURS_FILONS.has(m.deco[i]):
+			c = COULEURS_FILONS[m.deco[i]]
 		img.set_pixel(i % TAILLE_MORCEAU, i / TAILLE_MORCEAU, c)
 	return img
 

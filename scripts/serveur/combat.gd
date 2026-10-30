@@ -42,13 +42,21 @@ func preparer_session(s: Dictionary, fiche: Dictionary) -> void:
 
 func vitesse(s: Dictionary) -> float:
 	var v := Config.VITESSE_JOUEUR * float(Roles.donnees(s.role).vitesse) * float(s.vitesse)
-	if _effet(s, "sprint"):
+	if _effet(s, "sprint") or _effet(s, "ruee"):
 		v *= 1.0 + float(Roles.donnees(s.role).competence.get("bonus", 0.0))
 	return v
 
 
 func recharge_esquive(s: Dictionary) -> float:
 	return float(Roles.donnees(s.role).esquive)
+
+
+func a_effet(s: Dictionary, nom: String) -> bool:
+	return _effet(s, nom)
+
+
+func evenement(genre: String, donnees: Dictionary) -> void:
+	_evenement(genre, donnees)
 
 
 func _effet(s: Dictionary, nom: String) -> bool:
@@ -61,6 +69,7 @@ func drapeaux(s: Dictionary) -> int:
 	if _effet(s, "ombre"): f |= 2
 	if _effet(s, "bouclier"): f |= 4
 	if _effet(s, "sprint"): f |= 8
+	if _effet(s, "ruee"): f |= 16
 	return f
 
 
@@ -227,6 +236,7 @@ func mourir(s: Dictionary, par: String) -> void:
 	s.effets = {}
 	s.mort_jusqua = temps + Roles.REAPPARITION
 	s.dernier_vainqueur = par
+	serveur.recolte.mourir(s)
 	_evenement("mort", {"id": s.id, "par": par, "pos": s.pos})
 	serveur.diffuser("%s a été vaincu par %s." % [s.nom, par] if par != s.nom else "%s est mort." % s.nom, "combat")
 	serveur.journal("%s vaincu par %s" % [s.nom, par])
@@ -257,9 +267,10 @@ func tick(delta: float) -> void:
 	for s in serveur.joueurs.values():
 		if s.mort and temps >= s.mort_jusqua:
 			reapparaitre(s)
-		if s.effets.has("sprint") and not _effet(s, "sprint"):
-			s.effets.erase("sprint")
-			serveur.envoyer_reglages(s.id) # fin du sprint : vitesse normale
+		for effet in ["sprint", "ruee"]:
+			if s.effets.has(effet) and not _effet(s, effet):
+				s.effets.erase(effet)
+				serveur.envoyer_reglages(s.id) # fin du sprint : vitesse normale
 	for m in mannequins.values():
 		if m.vie < m.max and temps - m.dernier > 3.0:
 			m.vie = m.max
