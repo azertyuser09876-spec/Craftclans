@@ -1,7 +1,7 @@
 class_name VueMonde
 extends Node2D
-## Affichage du terrain : sol en tuiles, décors triés par profondeur (plus un objet
-## est bas à l'écran, plus il passe devant), et cycle jour/nuit.
+## Affichage du terrain par morceaux : sol en tuiles, décors triés par profondeur (plus un
+## objet est bas à l'écran, plus il passe devant), cycle jour/nuit, et images pour les cartes.
 
 const TEX_SOLS := preload("res://assets/tuiles/sols.png")
 const TEX_DECOS := {
@@ -10,16 +10,28 @@ const TEX_DECOS := {
 	Monde.Deco.ROCHER: preload("res://assets/decors/rocher.png"),
 	Monde.Deco.BUISSON: preload("res://assets/decors/buisson.png"),
 	Monde.Deco.FLEURS: preload("res://assets/decors/fleurs.png"),
+	Monde.Deco.CACTUS: preload("res://assets/decors/cactus.png"),
+	Monde.Deco.SAPIN_NEIGE: preload("res://assets/decors/sapin_neige.png"),
+	Monde.Deco.ARBRE_MORT: preload("res://assets/decors/arbre_mort.png"),
+	Monde.Deco.ROSEAUX: preload("res://assets/decors/roseaux.png"),
+	Monde.Deco.ROCHER_NOIR: preload("res://assets/decors/rocher_noir.png"),
+	Monde.Deco.OS: preload("res://assets/decors/os.png"),
 }
+const DECOS_AU_SOL := [Monde.Deco.FLEURS, Monde.Deco.OS, Monde.Deco.ROSEAUX]
+const DECOS_HAUTES := [Monde.Deco.ARBRE, Monde.Deco.SAPIN, Monde.Deco.SAPIN_NEIGE, Monde.Deco.ARBRE_MORT]
 const TEX_FEU := preload("res://assets/decors/feu_de_camp.png")
 const TEX_LUMIERE := preload("res://assets/ui/lumiere.png")
+const ATLAS_LAVE := Vector2i(0, 10)
 
 var monde: Monde
 var sol: TileMapLayer
 ## Les personnages s'ajoutent ici pour être triés avec les arbres et les rochers.
 var objets: Node2D
 var nuit: CanvasModulate
-var arbres := {} # case -> Sprite2D (arbres et sapins, rendus transparents quand on passe derrière)
+## Images de carte des morceaux vus pendant la partie : Vector2i -> ImageTexture
+var cartes := {}
+var _conteneurs := {} # Vector2i -> Node2D (décors du morceau)
+var _arbres := {} # case -> Sprite2D (rendus transparents quand on passe derrière)
 var _transparents: Array = []
 var _lumieres: Array[PointLight2D] = []
 
@@ -32,44 +44,9 @@ func _ready() -> void:
 	sol = TileMapLayer.new()
 	sol.tile_set = _creer_tileset()
 	add_child(sol)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = monde.graine
-	for y in Monde.TAILLE:
-		for x in Monde.TAILLE:
-			var s := monde.sol_en(x, y)
-			if s == Monde.Sol.EAU:
-				sol.set_cell(Vector2i(x, y), 0, Vector2i(0, 0))
-			else:
-				var variante := 3 if rng.randf() < 0.08 else rng.randi_range(0, 2)
-				sol.set_cell(Vector2i(x, y), 0, Vector2i(variante, s))
-	# Une bordure d'eau autour de l'île, pour ne pas voir le vide.
-	for y in range(-20, Monde.TAILLE + 20):
-		for x in range(-20, Monde.TAILLE + 20):
-			if not monde.dans_le_monde(x, y):
-				sol.set_cell(Vector2i(x, y), 0, Vector2i(0, 0))
 	objets = Node2D.new()
 	objets.y_sort_enabled = true
 	add_child(objets)
-	var t := Config.TAILLE_TUILE
-	for y in Monde.TAILLE:
-		for x in Monde.TAILLE:
-			var d := monde.deco_en(x, y)
-			if d == Monde.Deco.AUCUN:
-				continue
-			var pied := Vector2((x + 0.5) * t, (y + 0.7) * t)
-			if d == Monde.Deco.FEU:
-				_ajouter_feu(pied)
-				continue
-			var spr := Sprite2D.new()
-			spr.texture = TEX_DECOS[d]
-			spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 4)
-			spr.position = pied + Vector2(rng.randf_range(-3, 3), 0)
-			spr.flip_h = rng.randf() < 0.5
-			if d == Monde.Deco.FLEURS:
-				spr.z_index = -1 # au ras du sol
-			if d in [Monde.Deco.ARBRE, Monde.Deco.SAPIN]:
-				arbres[Vector2i(x, y)] = spr
-			objets.add_child(spr)
 	nuit = CanvasModulate.new()
 	add_child(nuit)
 
@@ -80,20 +57,89 @@ func _creer_tileset() -> TileSet:
 	var src := TileSetAtlasSource.new()
 	src.texture = TEX_SOLS
 	src.texture_region_size = Vector2i(32, 32)
-	# Eau : une tuile animée sur 4 images (ligne 0).
-	src.create_tile(Vector2i(0, 0))
-	src.set_tile_animation_columns(Vector2i(0, 0), 4)
-	src.set_tile_animation_frames_count(Vector2i(0, 0), 4)
-	for f in 4:
-		src.set_tile_animation_frame_duration(Vector2i(0, 0), f, 0.35)
-	for ligne in range(1, 6):
+	# Eau et lave : tuiles animées sur 4 images.
+	for anim in [Vector2i(0, 0), ATLAS_LAVE]:
+		src.create_tile(anim)
+		src.set_tile_animation_columns(anim, 4)
+		src.set_tile_animation_frames_count(anim, 4)
+		for f in 4:
+			src.set_tile_animation_frame_duration(anim, f, 0.35 if anim.y == 0 else 0.5)
+	for ligne in range(1, 10):
 		for v in 4:
 			src.create_tile(Vector2i(v, ligne))
 	ts.add_source(src, 0)
 	return ts
 
 
-func _ajouter_feu(pied: Vector2) -> void:
+func a_morceau(cle: Vector2i) -> bool:
+	return _conteneurs.has(cle)
+
+
+func afficher_morceau(cle: Vector2i) -> void:
+	if _conteneurs.has(cle):
+		retirer_morceau(cle)
+	var m := monde.morceau(cle)
+	if m.is_empty():
+		return
+	var t := Config.TAILLE_TUILE
+	var base := cle * Monde.TAILLE_MORCEAU
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([monde.graine, cle.x, cle.y, 1])
+	var conteneur := Node2D.new()
+	conteneur.y_sort_enabled = true
+	objets.add_child(conteneur)
+	_conteneurs[cle] = conteneur
+	for i in Monde.CASES:
+		var c := base + Vector2i(i % Monde.TAILLE_MORCEAU, i / Monde.TAILLE_MORCEAU)
+		var s: int = m.sol[i]
+		var hasard := rng.randf()
+		if s == Monde.Sol.EAU:
+			sol.set_cell(c, 0, Vector2i(0, 0))
+		elif s == Monde.Sol.LAVE:
+			sol.set_cell(c, 0, ATLAS_LAVE)
+		else:
+			sol.set_cell(c, 0, Vector2i(3 if hasard < 0.08 else int(hasard * 37) % 3, s))
+		var d: int = m.deco[i]
+		if d == Monde.Deco.AUCUN:
+			continue
+		var pied := Vector2((c.x + 0.5) * t, (c.y + 0.7) * t)
+		if d == Monde.Deco.FEU:
+			_ajouter_feu(conteneur, pied)
+			continue
+		var spr := Sprite2D.new()
+		spr.texture = TEX_DECOS[d]
+		spr.offset = Vector2(0, -spr.texture.get_height() / 2.0 + 4)
+		spr.position = pied + Vector2(int(hasard * 1000) % 7 - 3, 0)
+		spr.flip_h = int(hasard * 10000) % 2 == 0
+		if d in DECOS_AU_SOL:
+			spr.z_index = -1 # au ras du sol
+		if d in DECOS_HAUTES:
+			_arbres[c] = spr
+		conteneur.add_child(spr)
+	if not cartes.has(cle):
+		cartes[cle] = ImageTexture.create_from_image(Monde.image_carte(m))
+
+
+func retirer_morceau(cle: Vector2i) -> void:
+	if not _conteneurs.has(cle):
+		return
+	var base := cle * Monde.TAILLE_MORCEAU
+	for i in Monde.CASES:
+		var c := base + Vector2i(i % Monde.TAILLE_MORCEAU, i / Monde.TAILLE_MORCEAU)
+		sol.erase_cell(c)
+		_arbres.erase(c)
+	for l in _conteneurs[cle].find_children("*", "PointLight2D", true, false):
+		_lumieres.erase(l)
+	_transparents.clear()
+	_conteneurs[cle].queue_free()
+	_conteneurs.erase(cle)
+
+
+func morceaux_affiches() -> Array:
+	return _conteneurs.keys()
+
+
+func _ajouter_feu(parent: Node2D, pied: Vector2) -> void:
 	var frames := SpriteFrames.new()
 	frames.set_animation_speed("default", 8)
 	for f in 4:
@@ -106,7 +152,7 @@ func _ajouter_feu(pied: Vector2) -> void:
 	feu.offset = Vector2(0, -12)
 	feu.position = pied
 	feu.play()
-	objets.add_child(feu)
+	parent.add_child(feu)
 	var lum := PointLight2D.new()
 	lum.texture = TEX_LUMIERE
 	lum.texture_scale = 5.0
@@ -119,12 +165,13 @@ func _ajouter_feu(pied: Vector2) -> void:
 ## Rend transparents les arbres qui cachent ce point (le joueur local).
 func voir_a_travers(pos: Vector2) -> void:
 	for spr in _transparents:
-		spr.modulate.a = 1.0
+		if is_instance_valid(spr):
+			spr.modulate.a = 1.0
 	_transparents.clear()
-	var c := Vector2i(pos / Config.TAILLE_TUILE)
+	var c := Vector2i((pos / Config.TAILLE_TUILE).floor())
 	for dy in range(1, 3):
 		for dx in range(-1, 2):
-			var spr: Sprite2D = arbres.get(c + Vector2i(dx, dy))
+			var spr: Sprite2D = _arbres.get(c + Vector2i(dx, dy))
 			if spr and spr.position.y > pos.y and absf(spr.position.x - pos.x) < 28.0:
 				spr.modulate.a = 0.45
 				_transparents.append(spr)
@@ -154,4 +201,5 @@ func definir_heure(h: float) -> void:
 	nuit.color = couleur_heure(h)
 	var force := clampf(1.0 - nuit.color.v, 0.0, 1.0) * 1.6
 	for l in _lumieres:
-		l.energy = force + randf_range(-0.05, 0.05)
+		if is_instance_valid(l):
+			l.energy = force + randf_range(-0.05, 0.05)

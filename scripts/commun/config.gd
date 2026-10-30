@@ -3,7 +3,7 @@ extends Node
 
 ## À augmenter à chaque changement des messages réseau : un client et un serveur
 ## de protocoles différents refusent de jouer ensemble.
-const PROTOCOLE := 2
+const PROTOCOLE := 3
 
 const PORT_DEFAUT := 8000
 const TAILLE_TUILE := 32
@@ -65,6 +65,7 @@ func _creer_touches() -> void:
 	_action("esquive", [KEY_SPACE, KEY_SHIFT])
 	_action("competence", [KEY_E])
 	_action("role", [KEY_R])
+	_action("carte", [KEY_M, KEY_SEMICOLON])
 
 
 func _action(nom: String, touches: Array) -> void:

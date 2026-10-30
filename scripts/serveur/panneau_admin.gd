@@ -5,7 +5,7 @@ extends Control
 var serveur: Node
 var _statut: Label
 var _carte: Control
-var _image_carte: ImageTexture
+var _textures_carte := {} # Vector2i -> ImageTexture
 var _liste_joueurs: VBoxContainer
 var _liste_connus: VBoxContainer
 var _liste_boss: VBoxContainer
@@ -175,7 +175,7 @@ func _onglet_tableau() -> Control:
 	h.add_child(droite)
 	droite.add_child(_titre("Carte"))
 	_carte = Control.new()
-	_carte.custom_minimum_size = Vector2(336, 336)
+	_carte.custom_minimum_size = Vector2(384, 384)
 	_carte.draw.connect(_dessiner_carte)
 	droite.add_child(_carte)
 	return v
@@ -193,26 +193,31 @@ func _enregistrer_config() -> void:
 func _dessiner_carte() -> void:
 	if serveur.monde == null:
 		return
-	if _image_carte == null or _image_carte.get_meta("graine", 0) != serveur.monde.graine:
-		var couleurs := [Color(0.2, 0.42, 0.72), Color(0.86, 0.78, 0.54), Color(0.34, 0.62, 0.28),
-			Color(0.22, 0.48, 0.23), Color(0.5, 0.36, 0.24), Color(0.5, 0.5, 0.53)]
-		var img := Image.create(Monde.TAILLE, Monde.TAILLE, false, Image.FORMAT_RGB8)
-		for y in Monde.TAILLE:
-			for x in Monde.TAILLE:
-				var c: Color = couleurs[serveur.monde.sol_en(x, y)]
-				if serveur.monde.deco_en(x, y) in [Monde.Deco.ARBRE, Monde.Deco.SAPIN]:
-					c = c.darkened(0.3)
-				img.set_pixel(x, y, c)
-		_image_carte = ImageTexture.create_from_image(img)
-		_image_carte.set_meta("graine", serveur.monde.graine)
+	# Cadre : tous les morceaux explorés (et les joueurs), au moins 6×6 morceaux.
+	var mini := Vector2i(-3, -3)
+	var maxi := Vector2i(2, 2)
+	for cle in serveur.cartes:
+		mini = Vector2i(mini.x if mini.x < cle.x else cle.x, mini.y if mini.y < cle.y else cle.y)
+		maxi = Vector2i(maxi.x if maxi.x > cle.x else cle.x, maxi.y if maxi.y > cle.y else cle.y)
+	if _textures_carte.size() > serveur.cartes.size():
+		_textures_carte.clear() # le monde a été remis à zéro
+	var cote := maxi(maxi.x - mini.x, maxi.y - mini.y) + 1
 	var taille := _carte.size.x
-	_carte.draw_texture_rect(_image_carte, Rect2(Vector2.ZERO, Vector2(taille, taille)), false)
-	var echelle := taille / (Monde.TAILLE * Config.TAILLE_TUILE)
+	var px_morceau := taille / cote
+	_carte.draw_rect(Rect2(Vector2.ZERO, Vector2(taille, taille)), Color(0.05, 0.06, 0.08))
+	for cle in serveur.cartes:
+		if not _textures_carte.has(cle):
+			_textures_carte[cle] = ImageTexture.create_from_image(serveur.cartes[cle])
+		_carte.draw_texture_rect(_textures_carte[cle], Rect2(Vector2(cle - mini) * px_morceau, Vector2(px_morceau, px_morceau)), false)
+	var echelle := px_morceau / (Monde.TAILLE_MORCEAU * Config.TAILLE_TUILE)
+	var origine := -Vector2(mini) * Monde.TAILLE_MORCEAU * Config.TAILLE_TUILE
+	_carte.draw_circle((origine) * echelle, 3, Color(1, 0.5, 0.2))
 	for s in serveur.joueurs.values():
-		var p: Vector2 = s.pos * echelle
+		var p: Vector2 = (s.pos + origine) * echelle
 		_carte.draw_circle(p, 5, Color.BLACK)
 		_carte.draw_circle(p, 4, Color(1, 0.85, 0.3) if serveur.est_admin(s.nom) else Color.WHITE)
 		_carte.draw_string(get_theme_default_font(), p + Vector2(7, 4), s.nom, HORIZONTAL_ALIGNMENT_LEFT, -1, 12)
+	_carte.draw_string(get_theme_default_font(), Vector2(4, taille - 6), "%d morceaux explorés" % serveur.cartes.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12)
 
 
 # ------------------------------------------------------------------ Joueurs

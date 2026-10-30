@@ -17,8 +17,11 @@ var _angle := 0.0
 func _ready() -> void:
 	_charger()
 	# Fond : un monde qui défile lentement.
-	var vue := VueMonde.new(Monde.new(1234))
+	var vue := VueMonde.new(Monde.new(1234, true))
 	add_child(vue)
+	for y in range(-2, 2):
+		for x in range(-2, 2):
+			vue.afficher_morceau(Vector2i(x, y))
 	vue.definir_heure(17.6)
 	_camera = Camera2D.new()
 	_camera.zoom = Vector2(2, 2)
@@ -134,7 +137,7 @@ func _texte(t: String) -> Label:
 
 func _process(delta: float) -> void:
 	_angle += delta * 0.05
-	_camera.position = Vector2(Monde.TAILLE, Monde.TAILLE) * 16.0 + Vector2(cos(_angle), sin(_angle * 0.7)) * 700.0
+	_camera.position = Vector2(cos(_angle), sin(_angle * 0.7)) * 700.0
 
 
 func _changer_apparence(sens: int) -> void:

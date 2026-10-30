@@ -9,7 +9,8 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 |---|---|---|
 | 0 | Fondations : serveur, connexion, déplacement, sauvegarde, programme de gestion, publication | ✅ v0.0.1 |
 | 1 | Rôles et combat : 6 rôles, visée au sol, tir chargé, esquive, équipes, mannequins | ✅ v0.1.0 |
-| 2 | La carte (monde infini, biomes, jour/nuit) | à venir |
+| 2 | La carte : monde infini par morceaux, 10 biomes, danger selon la distance, minicarte et grande carte | ✅ v0.2.0 |
+| 3 | Ressources, inventaire, mort | à venir |
 | … | voir la feuille de route du document de conception | |
 
 ## Jouer
@@ -27,7 +28,7 @@ principal.tscn / scripts/principal.gd   point d'entrée : lance le jeu ou le ser
 scripts/commun/   partagé par le jeu et le serveur
   config.gd         constantes, version, protocole réseau, options de lancement
   reseau.gd         tous les messages réseau (WebSocket, port 8000)
-  monde.gd          génération du terrain à partir d'une graine, collisions
+  monde.gd          monde infini : morceaux de 32×32 cases générés depuis la graine, biomes, danger, collisions
   regles.gd         règles de déplacement (appliquées par le serveur, prédites par le jeu)
   roles.gd          les rôles et leurs capacités (vie, dégâts, portées, recharges)
   donnees_boss.gd   liste des boss mondiaux
@@ -38,7 +39,7 @@ scripts/serveur/  serveur dédié
   commandes.gd      commandes admin, triches, boss (console et chat /aide)
   panneau_admin.gd  fenêtre de gestion du serveur
 scripts/client/   le jeu
-  menu.gd, jeu.gd, vue_monde.gd, joueur_visuel.gd, joystick.gd, theme_jeu.gd,
+  menu.gd, jeu.gd, vue_monde.gd, carte_vue.gd (minicarte et grande carte), joueur_visuel.gd, joystick.gd, theme_jeu.gd,
   effets.gd, barre_combat.gd, mannequin_visuel.gd
 assets/           images (générées par outils/generer_assets.py)
 distribution/     fichiers ajoutés aux zips (lisez-moi, .bat du serveur)
@@ -65,6 +66,14 @@ La sauvegarde est dans `%APPDATA%\Craftclans\serveur`, hors du dossier du serveu
 
 Si les messages réseau changent, augmenter `Config.PROTOCOLE` : un jeu et un serveur de protocoles différents
 refusent de jouer ensemble et le joueur est invité à mettre à jour.
+
+## Le monde
+
+Le monde est infini et découpé en morceaux de 32×32 cases. **Seul le serveur génère le terrain** (à partir de la graine)
+et envoie au jeu les morceaux autour de chaque joueur. Chaque morceau visité est enregistré dans
+`monde\morceaux\x_y.bin` : il ne change plus, même si le générateur change dans une future version.
+Le danger (0 à 10) augmente avec la distance au feu de camp de départ ; les vallées paisibles sont plus calmes,
+les terres brûlées toujours dangereuses.
 
 ## Publier une version
 

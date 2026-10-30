@@ -58,6 +58,12 @@ var _dessin_visee: Node2D
 var _barre: BarreCombat
 var _choix_role: PanelContainer
 var _ecran_mort: Label
+var _lieu: Label
+var _minicarte: CarteVue
+var _grande_carte: CarteVue
+var _a_afficher: Array = [] # morceaux reçus, affichés petit à petit
+var _accu_morceaux := 0.0
+const RAYON_GARDE := 4 # morceaux gardés autour du joueur (le serveur envoie dans un rayon de 2)
 
 
 func _ready() -> void:
@@ -106,6 +112,8 @@ func _ready() -> void:
 	Reseau.evenement.connect(_sur_evenement)
 	Reseau.deconnecte.connect(_sur_deconnexion)
 	Reseau.pong.connect(func(ms): _ping = ms)
+	Reseau.morceau_recu.connect(_sur_morceau)
+	RenderingServer.set_default_clear_color(Color(0.08, 0.1, 0.09))
 	if infos.get("nouveau", false) and Config.auto_connexion == "":
 		_choix_role.visible = true
 	if Config.auto_commande != "":
@@ -114,7 +122,7 @@ func _ready() -> void:
 
 
 func _en_jeu() -> bool:
-	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible
+	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible and not _grande_carte.visible
 
 
 # ------------------------------------------------------------------ Boucle
@@ -144,7 +152,33 @@ func _physics_process(_delta: float) -> void:
 	Regles.pas(monde, _mvt, dir, esquive, reglages.vitesse, reglages.vol, reglages.esquive)
 
 
+func _sur_morceau(cle: Vector2i, donnees: PackedByteArray) -> void:
+	if not monde.recevoir(cle, donnees).is_empty():
+		_a_afficher.erase(cle)
+		_a_afficher.append(cle)
+
+
+## Affiche quelques morceaux par image (pour ne pas saccader) et oublie ceux qui sont loin.
+func _gerer_morceaux(delta: float) -> void:
+	var ici := Monde.cle_de_position(_mvt.pos)
+	# Les plus proches d'abord
+	_a_afficher.sort_custom(func(a, b): return (a - ici).length_squared() < (b - ici).length_squared())
+	for i in mini(2, _a_afficher.size()):
+		var cle: Vector2i = _a_afficher.pop_front()
+		if monde.morceaux.has(cle):
+			vue.afficher_morceau(cle)
+	_accu_morceaux += delta
+	if _accu_morceaux < 1.0:
+		return
+	_accu_morceaux = 0.0
+	for cle in vue.morceaux_affiches():
+		if maxi(absi(cle.x - ici.x), absi(cle.y - ici.y)) > RAYON_GARDE:
+			vue.retirer_morceau(cle)
+			monde.oublier(cle)
+
+
 func _process(delta: float) -> void:
+	_gerer_morceaux(delta)
 	_correction = _correction.lerp(Vector2.ZERO, minf(delta * 10.0, 1.0))
 	moi.position = _mvt.pos + _correction
 	vue.voir_a_travers(moi.position)
@@ -162,6 +196,7 @@ func _process(delta: float) -> void:
 		_accu_ping = 0.0
 		Reseau.c_ping.rpc_id(1, Time.get_ticks_msec())
 	_maj_combat()
+	_maj_lieu()
 	_info.text = "Craftclans %s  |  %d joueur(s)  |  ping %d ms  |  %02d:%02d%s" % [
 		Config.version, autres.size() + 1, _ping, int(heure), int(fmod(heure, 1.0) * 60),
 		"" if reglages.equipe == "" else "  |  équipe " + reglages.equipe]
@@ -176,6 +211,22 @@ func _process(delta: float) -> void:
 	_debug_dessin.visible = montrer_debug
 	if montrer_debug:
 		_debug_dessin.queue_redraw()
+
+
+func _maj_lieu() -> void:
+	var c := Vector2i((_mvt.pos / Config.TAILLE_TUILE).floor())
+	if monde.morceaux.has(Monde.cle_de_case(c.x, c.y)):
+		var danger := monde.danger_en(c.x, c.y)
+		_lieu.text = "%s  ·  danger %d  ·  %d, %d" % [Monde.NOMS_BIOMES[monde.biome_en(c.x, c.y)], danger, c.x, c.y]
+		_lieu.add_theme_color_override("font_color", Color(0.75, 1, 0.7).lerp(Color(1, 0.35, 0.25), danger / 10.0))
+	var marqueurs := [[_mvt.pos, Color.WHITE]]
+	for a in autres.values():
+		marqueurs.append([a.position, Color(0.5, 1, 0.5) if a.allie else Color(1, 0.4, 0.35)])
+	for carte in [_minicarte, _grande_carte]:
+		if carte.visible:
+			carte.centre = _mvt.pos
+			carte.marqueurs = marqueurs
+			carte.queue_redraw()
 
 
 func _dessiner_debug() -> void:
@@ -213,12 +264,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_saisie.visible = false
 		elif _choix_role.visible:
 			_choix_role.visible = false
+		elif _grande_carte.visible:
+			_grande_carte.visible = false
 		else:
 			_menu_pause.visible = not _menu_pause.visible
 	elif not _en_jeu() or _visee_tactile:
 		return
 	elif event.is_action_pressed("role"):
 		_choix_role.visible = true
+	elif event.is_action_pressed("carte"):
+		_grande_carte.visible = not _grande_carte.visible
 	elif event.is_action_pressed("esquive"):
 		_esquive_demandee = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -578,7 +633,7 @@ func _creer_interface() -> void:
 
 	_debug_label = Label.new()
 	_debug_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_debug_label.position = Vector2(-260, 40)
+	_debug_label.position = Vector2(-260, 200)
 	_debug_label.custom_minimum_size = Vector2(250, 0)
 	_debug_label.add_theme_font_size_override("font_size", 14)
 	_debug_label.add_theme_color_override("font_color", Color(0.6, 1, 0.6))
@@ -671,6 +726,37 @@ func _creer_interface() -> void:
 
 	_creer_choix_role()
 
+	_lieu = Label.new()
+	_lieu.position = Vector2(12, 30)
+	_lieu.add_theme_font_size_override("font_size", 15)
+	_ui.add_child(_lieu)
+	_minicarte = CarteVue.new()
+	_minicarte.vue = vue
+	_minicarte.custom_minimum_size = Vector2(170, 170)
+	_minicarte.size = Vector2(170, 170)
+	_minicarte.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_minicarte.position = Vector2(-182, 80 if Config.est_mobile() else 12)
+	_minicarte.mouse_filter = Control.MOUSE_FILTER_STOP
+	_minicarte.gui_input.connect(func(ev):
+		if (ev is InputEventMouseButton or ev is InputEventScreenTouch) and ev.pressed:
+			_grande_carte.visible = true)
+	_ui.add_child(_minicarte)
+	_grande_carte = CarteVue.new()
+	_grande_carte.vue = vue
+	_grande_carte.grande = true
+	_grande_carte.pixels_par_case = 3.0
+	_grande_carte.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_grande_carte.offset_left = 60
+	_grande_carte.offset_top = 50
+	_grande_carte.offset_right = -60
+	_grande_carte.offset_bottom = -50
+	_grande_carte.visible = false
+	_grande_carte.mouse_filter = Control.MOUSE_FILTER_STOP
+	_grande_carte.gui_input.connect(func(ev):
+		if (ev is InputEventMouseButton or ev is InputEventScreenTouch) and ev.pressed:
+			_grande_carte.visible = false)
+	_ui.add_child(_grande_carte)
+
 	_menu_pause = PanelContainer.new()
 	_menu_pause.set_anchors_preset(Control.PRESET_CENTER)
 	_menu_pause.position = Vector2(-160, -110)
@@ -698,7 +784,7 @@ func _creer_interface() -> void:
 		_choix_role.visible = true)
 	vb.add_child(changer)
 	var aide := Label.new()
-	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle\nEntrée : chat (/aide)    F3 : infos développeur"
+	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte\nEntrée : chat (/aide)    F3 : infos développeur"
 	aide.add_theme_font_size_override("font_size", 14)
 	aide.modulate.a = 0.7
 	vb.add_child(aide)

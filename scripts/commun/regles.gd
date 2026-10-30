@@ -34,8 +34,8 @@ static func pas(monde: Monde, e: Dictionary, dir: Vector2, esquive: bool, vitess
 static func deplacer(monde: Monde, pos: Vector2, dir: Vector2, vitesse: float, vol: bool) -> Vector2:
 	var mouvement := dir * vitesse * PAS
 	if vol:
-		var t := Monde.TAILLE * Config.TAILLE_TUILE
-		return (pos + mouvement).clamp(Vector2.ZERO, Vector2(t, t))
+		return pos + mouvement
+	mouvement *= monde.facteur_sol(pos)
 	# Axe par axe, pour glisser le long des obstacles.
 	var essai := Vector2(pos.x + mouvement.x, pos.y)
 	if not monde.collision(essai, Config.RAYON_JOUEUR):

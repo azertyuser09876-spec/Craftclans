@@ -15,6 +15,7 @@ signal reglages_recus(reglages: Dictionary)
 signal teleporte(pos: Vector2)
 signal evenement(genre: String, donnees: Dictionary)
 signal pong(ms: int)
+signal morceau_recu(cle: Vector2i, donnees: PackedByteArray)
 
 var serveur: Node = null # renseigné côté serveur
 var raison_refus := ""
@@ -28,6 +29,7 @@ func connecter(adresse: String, infos: Dictionary) -> void:
 	raison_refus = ""
 	var url := adresse_vers_url(adresse)
 	var peer := WebSocketMultiplayerPeer.new()
+	peer.inbound_buffer_size = 1 << 21 # les morceaux du monde arrivent par paquets
 	var err := peer.create_client(url)
 	if err != OK:
 		echec.emit("Adresse invalide : %s" % url)
@@ -157,6 +159,11 @@ func s_message(texte: String, genre: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_reglages(reglages: Dictionary) -> void:
 	reglages_recus.emit(reglages)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func s_morceau(cle: Vector2i, donnees: PackedByteArray) -> void:
+	morceau_recu.emit(cle, donnees)
 
 
 @rpc("authority", "call_remote", "reliable")

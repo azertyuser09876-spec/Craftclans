@@ -23,6 +23,7 @@ Commandes sur PC
   Clic droit ou E : compétence (garder appuyé pour voir la zone, relâcher pour lancer)
   Espace : esquive (invincible pendant l'esquive)
   R : changer de rôle (pas en plein combat)
+  M : grande carte (ou clic sur la minicarte)
   Entrée : écrire dans le chat. /aide affiche les commandes.
   F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
   Échap : menu
@@ -32,6 +33,12 @@ Commandes sur téléphone
   Gros bouton à droite : attaque. Un appui rapide vise l'ennemi le plus proche ;
   faire glisser le doigt depuis le bouton permet de viser (et de charger l'arc).
   Étoile : compétence, même principe. Flèches bleues : esquive.
+
+Le monde
+  Le monde est infini. En haut à gauche : le biome où tu es, le niveau de danger (0 à 10)
+  et tes coordonnées. Plus tu t'éloignes du feu de camp de départ, plus c'est dangereux.
+  La carte ne montre que ce que tu as vu pendant la partie.
+  La boue et la neige ralentissent. L'eau et la lave bloquent.
 
 Équipes
   /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,

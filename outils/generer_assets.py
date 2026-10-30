@@ -88,20 +88,44 @@ def tuile_eau(rng_base, frame):
     return img
 
 
+def tuile_lave(frame):
+    img = Image.new("RGBA", (T, T))
+    px = img.load()
+    for y in range(T):
+        for x in range(T):
+            v = math.sin((x + frame * 2) * 0.35 + math.sin(y * 0.3)) * math.cos((y + frame) * 0.3)
+            px[x, y] = melange((190, 50, 20), (255, 170, 40), (v + 1) / 2) + (255,)
+    d = ImageDraw.Draw(img)
+    rng = random.Random(55)
+    for _ in range(4):
+        x, y = rng.randrange(T), rng.randrange(T)
+        d.ellipse([x - 2, (y + frame * 2) % T - 1, x + 2, (y + frame * 2) % T + 1], fill=(255, 230, 120, 255))
+    return img
+
+
+# Ordre des sols : doit suivre l'énumération Monde.Sol.
+SOLS = [
+    # (nom, base, écart, taches)
+    ("sable", (220, 198, 138), 10, [((196, 172, 112), 6, 1), ((240, 224, 170), 6, 1)]),
+    ("herbe", (86, 158, 70), 9, []),
+    ("herbe_foncee", (58, 124, 58), 8, []),
+    ("terre", (128, 92, 60), 10, [((100, 72, 48), 8, 2), ((150, 116, 80), 6, 1)]),
+    ("pierre", (128, 128, 134), 9, [((96, 96, 104), 6, 2), ((160, 160, 166), 6, 1)]),
+    ("neige", (232, 238, 246), 6, [((206, 216, 232), 8, 2), ((250, 252, 255), 6, 1)]),
+    ("boue", (92, 84, 52), 9, [((70, 64, 40), 8, 3), ((60, 90, 70), 4, 2)]),
+    ("cendre", (70, 64, 66), 8, [((50, 46, 48), 8, 2), ((110, 60, 40), 3, 1)]),
+    ("herbe_claire", (120, 186, 86), 9, []),
+]
+
+
 def generer_sols():
-    """Atlas des sols : ligne 0 = eau animée (4 images), lignes 1..5 = sols (4 variantes)."""
-    atlas = Image.new("RGBA", (T * 4, T * 6))
+    """Atlas des sols : ligne 0 = eau animée (4 images), lignes 1..9 = sols (4 variantes),
+    ligne 10 = lave animée (4 images)."""
+    atlas = Image.new("RGBA", (T * 4, T * 11))
     for f in range(4):
         atlas.paste(tuile_eau(None, f), (f * T, 0))
-    sols = [
-        # (nom, base, écart, taches)
-        ("sable", (220, 198, 138), 10, [((196, 172, 112), 6, 1), ((240, 224, 170), 6, 1)]),
-        ("herbe", (86, 158, 70), 9, []),
-        ("herbe_foncee", (58, 124, 58), 8, []),
-        ("terre", (128, 92, 60), 10, [((100, 72, 48), 8, 2), ((150, 116, 80), 6, 1)]),
-        ("pierre", (128, 128, 134), 9, [((96, 96, 104), 6, 2), ((160, 160, 166), 6, 1)]),
-    ]
-    for ligne, (nom, base, ecart, taches) in enumerate(sols, start=1):
+        atlas.paste(tuile_lave(f), (f * T, T * 10))
+    for ligne, (nom, base, ecart, taches) in enumerate(SOLS, start=1):
         for v in range(4):
             rng = random.Random(ligne * 100 + v)
             img = tuile_texturee(rng, base, ecart, taches)
@@ -109,14 +133,83 @@ def generer_sols():
                 brins_herbe(rng, img, (120, 196, 92), (64, 128, 56), 14)
                 if v == 3:
                     fleurettes(rng, img, 3)
+            elif nom == "herbe_claire":
+                brins_herbe(rng, img, (160, 220, 120), (90, 150, 70), 12)
+                fleurettes(rng, img, 2 if v < 3 else 5)
             elif nom == "herbe_foncee":
                 brins_herbe(rng, img, (86, 160, 72), (40, 96, 44), 16)
-            elif nom == "pierre":
+            elif nom == "boue":
+                brins_herbe(rng, img, (90, 130, 70), (50, 80, 46), 6)
+            elif nom in ("pierre", "cendre"):
                 d = ImageDraw.Draw(img)
                 x = rng.randrange(4, T - 8)
-                d.line([(x, 4), (x + 4, 12), (x + 2, 20)], fill=(90, 90, 98))
+                d.line([(x, 4), (x + 4, 12), (x + 2, 20)], fill=(90, 90, 98) if nom == "pierre" else (150, 60, 30))
             atlas.paste(img, (v * T, ligne * T))
     atlas.save(chemin("tuiles", "sols.png"))
+
+
+def generer_decors_biomes():
+    # cactus
+    img = Image.new("RGBA", (28, 44)); d = ImageDraw.Draw(img)
+    ombre(d, 14, 40, 9, 3)
+    vert, clair = (60, 140, 70, 255), (100, 180, 100, 255)
+    d.rounded_rectangle([10, 6, 18, 41], radius=4, fill=vert, outline=C)
+    d.rounded_rectangle([2, 14, 8, 28], radius=3, fill=vert, outline=C)
+    d.rectangle([6, 24, 11, 28], fill=vert)
+    d.rounded_rectangle([20, 10, 26, 24], radius=3, fill=vert, outline=C)
+    d.rectangle([17, 20, 22, 24], fill=vert)
+    d.line([(13, 9), (13, 38)], fill=clair)
+    for y in range(10, 40, 5):
+        d.point((11, y), fill=(240, 240, 220, 255)); d.point((17, y + 2), fill=(240, 240, 220, 255))
+    d.ellipse([11, 2, 17, 8], fill=(240, 100, 140, 255))
+    img.save(chemin("decors", "cactus.png"))
+    # sapin enneigé : le sapin avec de la neige
+    sapin = Image.open(chemin("decors", "sapin.png")).convert("RGBA")
+    px = sapin.load()
+    for y in range(sapin.height):
+        for x in range(sapin.width):
+            r, g, b, a = px[x, y]
+            if a > 0 and g > r + 20 and (y % 14 < 4 or (x + y) % 7 == 0):
+                px[x, y] = (236, 242, 250, 255)
+    sapin.save(chemin("decors", "sapin_neige.png"))
+    # arbre mort
+    img = Image.new("RGBA", (48, 72)); d = ImageDraw.Draw(img)
+    ombre(d, 24, 67, 14, 4)
+    bois, fonce = (90, 70, 60, 255), (60, 46, 40, 255)
+    d.polygon([(20, 68), (28, 68), (27, 30), (21, 30)], fill=bois, outline=C)
+    for (x1, y1, x2, y2) in [(24, 40, 10, 22), (24, 34, 38, 16), (12, 26, 6, 14), (34, 20, 42, 10), (24, 32, 24, 8)]:
+        d.line([(x1, y1), (x2, y2)], fill=C, width=4)
+        d.line([(x1, y1), (x2, y2)], fill=bois, width=2)
+    d.line([(23, 66), (23, 36)], fill=fonce)
+    img.save(chemin("decors", "arbre_mort.png"))
+    # roseaux
+    img = Image.new("RGBA", (24, 26)); d = ImageDraw.Draw(img)
+    rng = random.Random(3)
+    for _ in range(7):
+        x = rng.randrange(3, 21); h = rng.randrange(12, 22)
+        d.line([(x, 25), (x + rng.randrange(-2, 3), 25 - h)], fill=(80, 130, 60, 255), width=1)
+        if rng.random() < 0.6:
+            d.rectangle([x - 1, 25 - h - 1, x + 1, 25 - h + 4], fill=(110, 70, 40, 255))
+    img.save(chemin("decors", "roseaux.png"))
+    # rocher volcanique
+    roc = Image.open(chemin("decors", "rocher.png")).convert("RGBA")
+    px = roc.load()
+    for y in range(roc.height):
+        for x in range(roc.width):
+            r, g, b, a = px[x, y]
+            if a > 200 and r > 70:
+                v = (r + g + b) // 3
+                px[x, y] = (v // 2 + 10, v // 3, v // 3, a)
+    d = ImageDraw.Draw(roc)
+    d.line([(12, 12), (16, 20), (22, 22)], fill=(255, 120, 40, 255))
+    roc.save(chemin("decors", "rocher_noir.png"))
+    # os (désert)
+    img = Image.new("RGBA", (24, 14)); d = ImageDraw.Draw(img)
+    os_c = (236, 228, 206, 255)
+    d.line([(4, 8), (20, 6)], fill=os_c, width=3)
+    for x, y in ((3, 6), (3, 10), (21, 4), (21, 8)):
+        d.ellipse([x - 2, y - 2, x + 2, y + 2], fill=os_c)
+    img.save(chemin("decors", "os.png"))
 
 
 # ---------------------------------------------------------------- Décors
@@ -589,6 +682,7 @@ if __name__ == "__main__":
     generer_buisson()
     generer_fleurs()
     generer_feu()
+    generer_decors_biomes()
     generer_personnages()
     generer_interface()
     generer_roles()

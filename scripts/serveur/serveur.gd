@@ -27,6 +27,13 @@ var _accu_sauvegarde := 0.0
 var _derniere_copie := 0
 var _derniere_minute := ""
 var _fichier_journal: FileAccess
+var _accu_morceaux := 0.0
+var _accu_nettoyage := 0.0
+## Images de carte des morceaux visités (pour le panneau) : Vector2i -> Image
+var cartes := {}
+
+const RAYON_ENVOI := 2 # morceaux envoyés autour de chaque joueur (5×5)
+const MORCEAUX_PAR_ENVOI := 6
 
 
 func _ready() -> void:
@@ -40,11 +47,13 @@ func _ready() -> void:
 	if donnees.is_empty():
 		journal("Le serveur ne démarre pas pour ne pas abîmer la sauvegarde.")
 		return
-	monde = Monde.new(int(donnees.graine))
+	_creer_monde()
 	combat = Combat.new(self)
 	combat.mannequins_par_defaut()
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
+	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
+	peer.inbound_buffer_size = 1 << 18
 	var err := peer.create_server(port)
 	if err != OK:
 		journal("ERREUR : impossible d'ouvrir le port %d (déjà utilisé ?). Code %d." % [port, err])
@@ -101,6 +110,60 @@ func journal(texte: String) -> void:
 
 # ------------------------------------------------------------------ Boucle
 
+func _creer_monde() -> void:
+	monde = Monde.new(int(donnees.graine), true)
+	monde.chargeur = sauvegarde.charger_morceau
+	monde.sur_creation = func(cle: Vector2i, m: Dictionary):
+		sauvegarde.enregistrer_morceau(cle, m)
+		cartes[cle] = Monde.image_carte(m)
+	cartes.clear()
+	for cle in sauvegarde.morceaux_sauvegardes():
+		var m := sauvegarde.charger_morceau(cle)
+		if not m.is_empty():
+			cartes[cle] = Monde.image_carte(m)
+	journal("Monde : %d morceaux déjà explorés." % cartes.size())
+
+
+## Envoie à chaque joueur les morceaux proches qu'il n'a pas encore.
+func _envoyer_morceaux() -> void:
+	for s in joueurs.values():
+		var centre := Monde.cle_de_position(s.pos)
+		# Le joueur jette les morceaux à plus de RAYON_ENVOI + 2 ; on les oublie un peu avant
+		# pour les renvoyer s'il revient.
+		for cle in s.morceaux.keys():
+			if maxi(absi(cle.x - centre.x), absi(cle.y - centre.y)) > RAYON_ENVOI + 1:
+				s.morceaux.erase(cle)
+		var envoyes := 0
+		for anneau in RAYON_ENVOI + 1:
+			for dy in range(-anneau, anneau + 1):
+				for dx in range(-anneau, anneau + 1):
+					if maxi(absi(dx), absi(dy)) != anneau or envoyes >= MORCEAUX_PAR_ENVOI:
+						continue
+					var cle := centre + Vector2i(dx, dy)
+					if s.morceaux.has(cle):
+						continue
+					var m := monde.morceau(cle)
+					Reseau.s_morceau.rpc_id(s.id, cle, Monde.emballer(m))
+					s.morceaux[cle] = true
+					envoyes += 1
+
+
+## Libère la mémoire des morceaux loin de tous les joueurs (ils sont déjà sauvegardés).
+func _nettoyer_morceaux() -> void:
+	var garder := {}
+	for s in joueurs.values():
+		var c := Monde.cle_de_position(s.pos)
+		for dy in range(-RAYON_ENVOI - 2, RAYON_ENVOI + 3):
+			for dx in range(-RAYON_ENVOI - 2, RAYON_ENVOI + 3):
+				garder[c + Vector2i(dx, dy)] = true
+	for dy in range(-2, 2):
+		for dx in range(-2, 2):
+			garder[Vector2i(dx, dy)] = true # point de départ
+	for cle in monde.morceaux.keys():
+		if not garder.has(cle):
+			monde.oublier(cle)
+
+
 func _physics_process(delta: float) -> void:
 	if not actif:
 		return
@@ -126,6 +189,14 @@ func _physics_process(delta: float) -> void:
 		_derniere_copie = maintenant
 		sauvegarde.copie_de_secours()
 	_verifier_programmes_boss()
+	_accu_morceaux += delta
+	if _accu_morceaux >= 0.1:
+		_accu_morceaux = 0.0
+		_envoyer_morceaux()
+	_accu_nettoyage += delta
+	if _accu_nettoyage >= 15.0:
+		_accu_nettoyage = 0.0
+		_nettoyer_morceaux()
 
 
 func _envoyer_etat() -> void:
@@ -236,7 +307,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 		# Retour au même endroit, ou à l'endroit libre le plus proche.
 		pos = monde.point_libre(Vector2(fiche.pos[0], fiche.pos[1]))
 	var s := {
-		"id": id, "nom": nom, "pos": pos, "seq": 0, "budget": 30.0,
+		"id": id, "nom": nom, "pos": pos, "seq": 0, "budget": 30.0, "morceaux": {},
 		"apparence": clampi(int(infos.get("apparence", 0)), 0, Config.NB_APPARENCES - 1),
 		"vitesse": 1.0, "vol": false, "dieu": false, "mvt": Regles.nouvel_etat(pos),
 	}
@@ -447,7 +518,7 @@ func reinitialiser_monde() -> void:
 	for nom in anciens:
 		donnees.joueurs[nom] = {"jeton": anciens[nom].get("jeton", ""), "admin": anciens[nom].get("admin", false)}
 	donnees.bannis = bannis
-	monde = Monde.new(int(donnees.graine))
+	_creer_monde()
 	combat.retirer_mannequins()
 	combat.mannequins_par_defaut()
 	sauver()

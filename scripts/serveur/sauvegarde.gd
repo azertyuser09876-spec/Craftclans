@@ -12,19 +12,20 @@ extends RefCounted
 ## une fonction de migration. Pour une grosse mise à jour qui remet à zéro : mettre
 ## FORMAT_MIN_COMPATIBLE égal au nouveau FORMAT.
 
-const FORMAT := 1
+const FORMAT := 2
 const FORMAT_MIN_COMPATIBLE := 1
 const NB_COPIES := 10
 
 const DOSSIER := "user://serveur"
 const FICHIER_MONDE := DOSSIER + "/monde/monde.json"
+const DOSSIER_MORCEAUX := DOSSIER + "/monde/morceaux"
 const FICHIER_CONFIG := DOSSIER + "/config.json"
 const DOSSIER_COPIES := DOSSIER + "/copies"
 const DOSSIER_ARCHIVES := DOSSIER + "/archives"
 
 ## Migrations : clé = format de départ, valeur = nom de la fonction qui passe au format suivant.
 const MIGRATIONS := {
-	# 1: "_migrer_1_vers_2",
+	1: "_migrer_1_vers_2",
 }
 
 var dernier_message := ""
@@ -38,6 +39,7 @@ static func monde_vierge() -> Dictionary:
 		"version_jeu": Config.version,
 		"cree_le": Time.get_datetime_string_from_system(false, true),
 		"graine": rng.randi_range(1, 2_000_000_000),
+		"generateur": Monde.GENERATEUR,
 		"heure": 9.0,
 		"joueurs": {}, # par pseudo
 		"bannis": {}, # pseudo -> raison
@@ -85,6 +87,51 @@ func charger() -> Dictionary:
 			donnees.reglages[cle] = vierge.reglages[cle]
 	dernier_message = "Monde chargé (créé le %s, graine %d)." % [donnees.get("cree_le", "?"), int(donnees.graine)]
 	return donnees
+
+
+## Format 1 -> 2 (v0.2) : l'île d'essai devient un monde infini. Les joueurs gardent
+## leur pseudo, leur rôle et leur équipe, et repartent du point de départ.
+func _migrer_1_vers_2(d: Dictionary) -> Dictionary:
+	for nom in d.joueurs:
+		d.joueurs[nom].erase("pos")
+	d["generateur"] = Monde.GENERATEUR
+	return d
+
+
+# ------------------------------------------------------------------ Morceaux du monde
+# Un fichier par morceau visité : monde/morceaux/<x>_<y>.bin
+
+func charger_morceau(cle: Vector2i) -> Dictionary:
+	var chemin := "%s/%d_%d.bin" % [DOSSIER_MORCEAUX, cle.x, cle.y]
+	if not FileAccess.file_exists(chemin):
+		return {}
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	if f == null:
+		return {}
+	var generateur := f.get_8()
+	var m := Monde.deballer(f.get_buffer(f.get_length() - 1))
+	if not m.is_empty():
+		m["generateur"] = generateur
+	return m
+
+
+func enregistrer_morceau(cle: Vector2i, m: Dictionary) -> void:
+	DirAccess.make_dir_recursive_absolute(DOSSIER_MORCEAUX)
+	var f := FileAccess.open("%s/%d_%d.bin" % [DOSSIER_MORCEAUX, cle.x, cle.y], FileAccess.WRITE)
+	if f:
+		f.store_8(int(m.get("generateur", Monde.GENERATEUR)))
+		f.store_buffer(Monde.emballer(m))
+
+
+func morceaux_sauvegardes() -> Array:
+	var cles := []
+	if not DirAccess.dir_exists_absolute(DOSSIER_MORCEAUX):
+		return cles
+	for nom in DirAccess.get_files_at(DOSSIER_MORCEAUX):
+		var parties := nom.get_basename().split("_")
+		if parties.size() == 2:
+			cles.append(Vector2i(int(parties[0]), int(parties[1])))
+	return cles
 
 
 ## Écrit d'abord dans un fichier temporaire puis le renomme : une coupure de courant

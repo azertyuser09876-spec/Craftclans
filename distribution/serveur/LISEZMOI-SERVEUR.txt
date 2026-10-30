@@ -16,7 +16,7 @@ Ouvrir l'accès depuis Internet
      d'adresse dynamique (duckdns.org, gratuit) si ton IP change.
 
 La fenêtre de gestion
-  Tableau de bord : état, adresses, sauvegarde, réglages, mot de passe admin, carte.
+  Tableau de bord : état, adresses, sauvegarde, réglages, mot de passe admin, carte du monde exploré.
   Joueurs : rendre admin, téléporter, vitesse, vol, mode dieu, expulser, bannir,
             oublier un joueur (libère son pseudo s'il a changé de téléphone).
   Monde et triches : heure du jeu, vitesse du temps, mode développeur, triches,
@@ -31,6 +31,7 @@ Devenir admin en jeu
 Les sauvegardes
   Elles sont dans %APPDATA%\Craftclans\serveur (bouton « Ouvrir le dossier ») :
     monde\monde.json   le monde actuel
+    monde\morceaux\    le terrain déjà exploré (un fichier par morceau de 32×32 cases)
     copies\            copies de secours (les 10 dernières, une toutes les 30 minutes)
     archives\          anciens mondes (remise à zéro ou grosse mise à jour)
     config.json        réglages du serveur (port, mot de passe admin, message du jour)
