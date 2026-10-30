@@ -239,6 +239,9 @@ func _memoriser(s: Dictionary) -> void:
 
 func _sur_connexion(id: int) -> void:
 	_en_attente[id] = Time.get_ticks_msec() + ATTENTE_BONJOUR_MS
+	var peer := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
+	if peer:
+		journal("Appareil connecté depuis %s" % peer.get_peer_address(id))
 
 
 func _sur_deconnexion(id: int) -> void:

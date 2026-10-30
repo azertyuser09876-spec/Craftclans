@@ -10,6 +10,10 @@ var marqueurs: Array = [] # [position, couleur]
 var grande := false
 
 
+func _init() -> void:
+	clip_contents = true # les morceaux au bord ne débordent pas du cadre
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.04, 0.05, 0.07, 0.85))
 	if vue == null:

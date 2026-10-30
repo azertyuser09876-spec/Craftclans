@@ -10,6 +10,8 @@ Démarrer
 
 Ouvrir l'accès depuis Internet
   Le tableau de bord affiche les adresses à donner aux joueurs, avec un bouton Copier.
+  « Tester la connexion » dit si le serveur écoute bien et si le pare-feu Windows bloque ;
+  « Réparer le pare-feu Windows » fait l'étape 1 ci-dessous tout seul.
   1. Pare-feu Windows : clic droit sur ouvrir-port-pare-feu.bat > « Exécuter en tant
      qu'administrateur ». À refaire si tu as fermé ou refusé la fenêtre « Autoriser
      l'accès » de Windows : elle crée des blocages qui passent avant le port ouvert.

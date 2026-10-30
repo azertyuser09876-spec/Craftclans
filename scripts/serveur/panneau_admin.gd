@@ -6,6 +6,8 @@ var serveur: Node
 var _statut: Label
 var _adresses := {} # "local", "ipv4", "ipv6" -> LineEdit
 var _ip_publique := {"ipv4": "", "ipv6": ""}
+var _resultat_test: Label
+var _test_en_cours := false
 var _carte: Control
 var _textures_carte := {} # Vector2i -> ImageTexture
 var _liste_joueurs: VBoxContainer
@@ -168,7 +170,14 @@ func _onglet_tableau() -> Control:
 	aide_adr.add_theme_font_size_override("font_size", 14)
 	aide_adr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	gauche.add_child(aide_adr)
-	gauche.add_child(_ligne([_bouton("Actualiser les adresses Internet", _chercher_ip_publiques)]))
+	gauche.add_child(_ligne([
+		_bouton("Tester la connexion", _tester_connexion),
+		_bouton("Réparer le pare-feu Windows", _reparer_pare_feu),
+		_bouton("Actualiser les adresses", _chercher_ip_publiques),
+	]))
+	_resultat_test = _label("")
+	_resultat_test.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gauche.add_child(_resultat_test)
 	_chercher_ip_publiques.call_deferred()
 	gauche.add_child(_titre("Réglages"))
 	_nom = LineEdit.new()
@@ -488,6 +497,100 @@ func _chercher_ip_publiques() -> void:
 			req.queue_free()
 			_maj_adresses())
 		req.request("https://api.ipify.org" if genre == "ipv4" else "https://api6.ipify.org")
+
+
+## Le serveur essaie de se joindre lui-même par chacune de ses adresses, et vérifie le pare-feu.
+func _tester_connexion() -> void:
+	if _test_en_cours:
+		return
+	_test_en_cours = true
+	_resultat_test.text = "Test en cours…"
+	var lignes := []
+	var local_ok := false
+	var locales := []
+	for ip in IP.get_local_addresses():
+		if ip.count(".") == 3 and not ip.begins_with("127.") and not ip.begins_with("169.254"):
+			locales.append(ip)
+	for ip in locales:
+		var ok: bool = await _tester_url(Reseau.url_de(ip, _port()))
+		local_ok = local_ok or ok
+		lignes.append("%s  Réseau local %s" % ["OK   " if ok else "ÉCHEC", ip])
+	var v6: String = _adresses.ipv6.text if _adresses.ipv6.text.contains(":") else ""
+	if v6 != "":
+		var c := Reseau.decouper_adresse(v6)
+		var ok: bool = await _tester_url(Reseau.url_de(c.hote, c.port))
+		lignes.append("%s  IPv6 %s" % ["OK   " if ok else "ÉCHEC", c.hote])
+	if _ip_publique.ipv4 != "":
+		var ok: bool = await _tester_url(Reseau.url_de(_ip_publique.ipv4, _port()))
+		lignes.append("%s  IPv4 publique %s %s" % ["OK   " if ok else "?    ", _ip_publique.ipv4,
+			"(la redirection de la box marche)" if ok else "(normal sur beaucoup de box : à tester depuis un téléphone en 4G)"])
+	if locales.is_empty():
+		lignes.append("Ce PC n'a pas d'adresse sur le réseau local.")
+	elif local_ok:
+		lignes.append("Le serveur écoute bien sur le réseau. Si un appareil n'arrive pas à se connecter, "
+			+ "c'est le pare-feu de Windows ou de la box qui bloque, ou un Wi-Fi « invité » qui isole les appareils.")
+	else:
+		lignes.append("Le serveur ne répond pas sur son adresse locale : un autre programme bloque peut-être le port. "
+			+ "Regarde l'onglet Console.")
+	lignes.append_array(_etat_pare_feu())
+	_resultat_test.text = "\n".join(PackedStringArray(lignes))
+	_test_en_cours = false
+
+
+func _tester_url(url: String) -> bool:
+	var ws := WebSocketPeer.new()
+	if ws.connect_to_url(url) != OK:
+		return false
+	var fin := Time.get_ticks_msec() + 4000
+	while Time.get_ticks_msec() < fin:
+		ws.poll()
+		match ws.get_ready_state():
+			WebSocketPeer.STATE_OPEN:
+				ws.close()
+				return true
+			WebSocketPeer.STATE_CLOSED:
+				return false
+		await get_tree().process_frame
+	ws.close()
+	return false
+
+
+## Windows seulement : règles du pare-feu pour le serveur et type de réseau.
+func _etat_pare_feu() -> Array:
+	if OS.get_name() != "Windows":
+		return []
+	var exe := OS.get_executable_path().replace("/", "\\")
+	var script := ("$p = (Get-NetFirewallRule -DisplayName 'Craftclans serveur' -ErrorAction SilentlyContinue | Where-Object Enabled -eq 'True').Count; "
+		+ "$b = (Get-NetFirewallApplicationFilter -Program '%s' -ErrorAction SilentlyContinue | Get-NetFirewallRule | "
+		+ "Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' }).Count; "
+		+ "$r = (Get-NetConnectionProfile | ForEach-Object { $_.NetworkCategory }) -join ','; "
+		+ "Write-Output \"$p;$b;$r\"") % exe
+	var sortie := []
+	if OS.execute("powershell", ["-NoProfile", "-Command", script], sortie) != 0 or sortie.is_empty():
+		return ["Pare-feu Windows : impossible de lire les règles."]
+	var parties: PackedStringArray = str(sortie[0]).strip_edges().split(";")
+	if parties.size() < 3:
+		return ["Pare-feu Windows : réponse inattendue (%s)." % str(sortie[0]).strip_edges()]
+	var lignes := []
+	if int(parties[0]) == 0:
+		lignes.append("PROBLÈME  Pare-feu : le port n'est pas ouvert. Clique sur « Réparer le pare-feu Windows ».")
+	if int(parties[1]) > 0:
+		lignes.append("PROBLÈME  Pare-feu : %d règle(s) bloquent ce programme. Clique sur « Réparer le pare-feu Windows »." % int(parties[1]))
+	if lignes.is_empty():
+		lignes.append("OK     Pare-feu Windows : port ouvert, aucun blocage.")
+	lignes.append("Type de réseau Windows : %s" % parties[2].replace("Public", "Public").replace("Private", "Privé").replace("DomainAuthenticated", "Domaine"))
+	return lignes
+
+
+## Lance ouvrir-port-pare-feu.bat en administrateur (Windows demande la permission).
+func _reparer_pare_feu() -> void:
+	var bat := OS.get_executable_path().get_base_dir().path_join("ouvrir-port-pare-feu.bat")
+	if OS.get_name() != "Windows" or not FileAccess.file_exists(bat):
+		_resultat_test.text = "Le fichier ouvrir-port-pare-feu.bat est introuvable à côté du serveur."
+		return
+	OS.execute("powershell", ["-NoProfile", "-Command",
+		"Start-Process -FilePath '%s' -Verb RunAs" % bat.replace("/", "\\")], [], false)
+	_resultat_test.text = "Accepte la demande de Windows, puis clique sur « Tester la connexion »."
 
 
 # ------------------------------------------------------------------ Mise à jour
