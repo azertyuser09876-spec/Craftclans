@@ -54,7 +54,7 @@ func _ready() -> void:
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
 	peer.inbound_buffer_size = 1 << 18
-	var err := peer.create_server(port)
+	var err := peer.create_server(port, "*") # "*" : IPv4 et IPv6
 	if err != OK:
 		journal("ERREUR : impossible d'ouvrir le port %d (déjà utilisé ?). Code %d." % [port, err])
 		return

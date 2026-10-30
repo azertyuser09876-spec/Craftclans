@@ -4,6 +4,8 @@ extends Control
 
 var serveur: Node
 var _statut: Label
+var _adresses := {} # "local", "ipv4", "ipv6" -> LineEdit
+var _ip_publique := {"ipv4": "", "ipv6": ""}
 var _carte: Control
 var _textures_carte := {} # Vector2i -> ImageTexture
 var _liste_joueurs: VBoxContainer
@@ -149,6 +151,25 @@ func _onglet_tableau() -> Control:
 		_bouton("Ouvrir le dossier", func(): OS.shell_open(Sauvegarde.chemin_reel())),
 	]))
 	gauche.add_child(_ligne([_bouton("Arrêter le serveur", serveur.arreter)]))
+	gauche.add_child(_titre("Adresses à donner aux joueurs"))
+	for cle in ["local", "ipv6", "ipv4"]:
+		var champ := LineEdit.new()
+		champ.editable = false
+		champ.size_flags_horizontal = SIZE_EXPAND_FILL
+		_adresses[cle] = champ
+		var nom: String = {"local": "Même Wi-Fi / réseau", "ipv6": "Internet (IPv6)", "ipv4": "Internet (IPv4)"}[cle]
+		gauche.add_child(_ligne([_label(nom, 190), champ,
+			_bouton("Copier", func(): DisplayServer.clipboard_set(champ.text))]))
+	var aide_adr := _label("Même Wi-Fi : le téléphone doit être sur la même box que ce PC (pas en 4G/5G).\n"
+		+ "IPv6 : rien à rediriger, mais le pare-feu IPv6 de la box doit laisser passer le port (ou être désactivé).\n"
+		+ "IPv4 : le port doit être redirigé sur la box vers ce PC. Ne marche pas depuis le même Wi-Fi sur certaines box.\n"
+		+ "Depuis Internet, un nom duckdns.org (avec l'IPv6 et l'IPv4) évite de redonner l'adresse quand elle change.")
+	aide_adr.modulate.a = 0.6
+	aide_adr.add_theme_font_size_override("font_size", 14)
+	aide_adr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gauche.add_child(aide_adr)
+	gauche.add_child(_ligne([_bouton("Actualiser les adresses Internet", _chercher_ip_publiques)]))
+	_chercher_ip_publiques.call_deferred()
 	gauche.add_child(_titre("Réglages"))
 	_nom = LineEdit.new()
 	_nom.text = serveur.config.nom
@@ -417,6 +438,58 @@ func _sur_journal(ligne: String) -> void:
 		_console.add_text(ligne + "\n")
 
 
+# ------------------------------------------------------------------ Adresses
+
+func _port() -> int:
+	return Config.port if Config.port != Config.PORT_DEFAUT else int(serveur.config.port)
+
+
+## Ajoute le port à une adresse si ce n'est pas celui par défaut (le jeu l'ajoute tout seul).
+func _avec_port(ip: String) -> String:
+	if _port() == Config.PORT_DEFAUT:
+		return ip
+	return ("[%s]:%d" if ":" in ip else "%s:%d") % [ip, _port()]
+
+
+func _maj_adresses() -> void:
+	if _adresses.is_empty():
+		return
+	var locales := []
+	var v6_globales := []
+	for ip in IP.get_local_addresses():
+		if ip.count(".") == 3 and not ip.begins_with("127.") and not ip.begins_with("169.254"):
+			locales.append(_avec_port(ip))
+		elif ":" in ip and (ip.begins_with("2") or ip.begins_with("3")):
+			v6_globales.append(ip)
+	_adresses.local.text = ", ".join(PackedStringArray(locales)) if not locales.is_empty() else "aucune"
+	# Windows sort sur Internet avec une adresse IPv6 temporaire qui change souvent :
+	# on préfère donner son adresse stable (une autre adresse IPv6 globale du PC).
+	var v6 := ""
+	for ip in v6_globales:
+		if ip != _ip_publique.ipv6:
+			v6 = ip
+			break
+	if v6 == "":
+		v6 = _ip_publique.ipv6
+	_adresses.ipv6.text = _avec_port(v6) if v6 != "" else "pas d'IPv6 sur ce PC ou cette box"
+	_adresses.ipv4.text = _avec_port(_ip_publique.ipv4) if _ip_publique.ipv4 != "" else "recherche… (ou pas d'accès Internet)"
+
+
+## Demande à ipify.org les adresses publiques de ce PC (une en IPv4, une en IPv6).
+func _chercher_ip_publiques() -> void:
+	for genre in ["ipv4", "ipv6"]:
+		var req := HTTPRequest.new()
+		req.timeout = 8.0
+		add_child(req)
+		req.request_completed.connect(func(resultat, code, _entetes, corps):
+			var ip: String = corps.get_string_from_utf8().strip_edges()
+			if resultat == HTTPRequest.RESULT_SUCCESS and code == 200 and ip.is_valid_ip_address():
+				_ip_publique[genre] = ip
+			req.queue_free()
+			_maj_adresses())
+		req.request("https://api.ipify.org" if genre == "ipv4" else "https://api6.ipify.org")
+
+
 # ------------------------------------------------------------------ Mise à jour
 
 func _chaque_seconde() -> void:
@@ -424,15 +497,12 @@ func _chaque_seconde() -> void:
 		_statut.text = "Le serveur n'a pas démarré : regarde l'onglet Console."
 		return
 	var duree: int = (Time.get_ticks_msec() - serveur.demarre_le) / 1000
-	var ips := []
-	for ip in IP.get_local_addresses():
-		if ip.count(".") == 3 and not ip.begins_with("127.") and not ip.begins_with("169.254"):
-			ips.append(ip)
-	_statut.text = "%s\nÉtat : %s\nVersion %s, protocole %d, format de sauvegarde %d\nEn marche depuis %dh%02d\nJoueurs connectés : %d / %d\nAdresses locales : %s (port %d)\nGraine du monde : %d, heure du jeu : %.1f h\nDernière sauvegarde : %s\nSauvegardes : %s" % [
+	_maj_adresses()
+	_statut.text = "%s\nÉtat : %s\nVersion %s, protocole %d, format de sauvegarde %d\nEn marche depuis %dh%02d\nJoueurs connectés : %d / %d\nPort : %d\nGraine du monde : %d, heure du jeu : %.1f h\nDernière sauvegarde : %s\nSauvegardes : %s" % [
 		serveur.config.nom, "en ligne" if serveur.actif else "ARRÊTÉ (voir la console)",
 		Config.version, Config.PROTOCOLE, Sauvegarde.FORMAT, duree / 3600, (duree / 60) % 60,
-		serveur.joueurs.size(), int(serveur.config.joueurs_max), ", ".join(PackedStringArray(ips)),
-		Config.port if Config.port != Config.PORT_DEFAUT else int(serveur.config.port),
+		serveur.joueurs.size(), int(serveur.config.joueurs_max),
+		_port(),
 		int(serveur.donnees.graine), serveur.donnees.heure, serveur.derniere_sauvegarde, Sauvegarde.chemin_reel()]
 	_maj_en_cours = true
 	_heure.value = serveur.donnees.heure

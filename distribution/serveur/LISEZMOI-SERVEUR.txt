@@ -9,11 +9,21 @@ Démarrer
   automatique a lieu toutes les minutes et à chaque déconnexion).
 
 Ouvrir l'accès depuis Internet
+  Le tableau de bord affiche les adresses à donner aux joueurs, avec un bouton Copier.
   1. Pare-feu Windows : clic droit sur ouvrir-port-pare-feu.bat > « Exécuter en tant
-     qu'administrateur » (une seule fois). Windows peut aussi le proposer au premier lancement.
-  2. Box : redirige le port 8000 en TCP vers ce PC (c'est déjà fait selon toi).
-  3. Donne à tes amis ton adresse IP publique (https://www.monip.org) ou un nom
-     d'adresse dynamique (duckdns.org, gratuit) si ton IP change.
+     qu'administrateur ». À refaire si tu as fermé ou refusé la fenêtre « Autoriser
+     l'accès » de Windows : elle crée des blocages qui passent avant le port ouvert.
+  2. Pour l'IPv6 (conseillé) : rien à rediriger. Il faut seulement que le pare-feu IPv6
+     de la box laisse entrer le port 8000 en TCP (Freebox : « Pare-feu IPv6 » ;
+     Livebox : niveau de pare-feu IPv6 / règle pour ce PC). Le téléphone doit avoir l'IPv6
+     (c'est le cas en 4G/5G chez la plupart des opérateurs français).
+  3. Pour l'IPv4 : redirige le port 8000 en TCP vers ce PC sur la box. Attention, certaines
+     box (par exemple Free en IPv4 partagée) n'autorisent qu'une plage de ports : dans ce cas,
+     passe par l'IPv6 ou demande une IPv4 complète (fixe) à l'opérateur.
+  4. Test : le téléphone en 4G/5G, Wi-Fi coupé. Depuis le même Wi-Fi que le serveur,
+     utilise l'adresse locale : beaucoup de box refusent qu'on passe par l'adresse publique.
+  Un nom gratuit duckdns.org (renseigné avec l'IPv6 et l'IPv4) évite de redonner
+  l'adresse quand elle change.
 
 La fenêtre de gestion
   Tableau de bord : état, adresses, sauvegarde, réglages, mot de passe admin, carte du monde exploré.

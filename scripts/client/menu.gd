@@ -118,6 +118,7 @@ func _ready() -> void:
 		boite.add_child(quitter)
 
 	Reseau.echec.connect(_sur_echec)
+	Reseau.tentative.connect(func(url): _etat.text = "Connexion à %s…" % url.replace("ws://", ""))
 	Reseau.deconnecte.connect(_sur_echec)
 	Reseau.accueil.connect(_sur_accueil)
 
@@ -157,7 +158,6 @@ func _rejoindre() -> void:
 	reglages.adresse = _adresse.text.strip_edges()
 	_sauver()
 	_bouton.disabled = true
-	_etat.text = "Connexion à %s…" % Reseau.adresse_vers_url(reglages.adresse)
 	Reseau.connecter(reglages.adresse, {
 		"pseudo": pseudo, "jeton": reglages.jeton, "apparence": int(reglages.apparence),
 		"version": Config.version, "protocole": Config.PROTOCOLE,
@@ -165,6 +165,7 @@ func _rejoindre() -> void:
 
 
 func _sur_echec(raison: String) -> void:
+	print("Connexion : ", raison)
 	_bouton.disabled = false
 	_etat.text = raison
 

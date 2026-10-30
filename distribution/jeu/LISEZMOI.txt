@@ -13,9 +13,12 @@ Sur téléphone (Android)
 Se connecter
   Pseudo : ce que tu veux (2 à 16 caractères). Il est réservé à ton appareil
   dès ta première connexion.
-  Adresse du serveur : l'adresse donnée par le maître du serveur
-  (exemple : 86.12.34.56, ou monserveur.duckdns.org). Le port 8000 est ajouté tout seul.
-  Sur le même réseau que le serveur, l'adresse locale du PC suffit (exemple : 192.168.1.20).
+  Adresse du serveur : celle donnée par le maître du serveur (son panneau les affiche
+  avec un bouton Copier). Le port 8000 est ajouté tout seul.
+    - Sur le même Wi-Fi que le serveur : l'adresse locale (exemple : 192.168.1.20).
+    - Depuis Internet (4G/5G ou autre maison) : l'adresse IPv6 (exemple : 2a01:e0a:12:3456::10)
+      ou l'adresse IPv4 publique (exemple : 86.12.34.56), ou un nom duckdns.org.
+  Avec un nom, le jeu essaie l'IPv6 puis l'IPv4. En cas d'échec, le message dit quoi vérifier.
 
 Commandes sur PC
   ZQSD ou flèches : se déplacer

@@ -5,6 +5,7 @@ extends Node
 
 signal connecte
 signal echec(raison: String)
+signal tentative(url: String)
 signal deconnecte(raison: String)
 signal accueil(infos: Dictionary)
 signal etat_recu(etat: Dictionary)
@@ -20,6 +21,9 @@ signal morceau_recu(cle: Vector2i, donnees: PackedByteArray)
 var serveur: Node = null # renseigné côté serveur
 var raison_refus := ""
 var _limite_connexion := 0.0
+var _essais: Array = [] # adresses qui restent à essayer
+var _tentes: Array = [] # adresses déjà essayées (pour le message d'erreur)
+const DELAI_ESSAI := 6000
 
 
 # ------------------------------------------------------------------ Client
@@ -27,38 +31,105 @@ var _limite_connexion := 0.0
 func connecter(adresse: String, infos: Dictionary) -> void:
 	fermer()
 	raison_refus = ""
-	var url := adresse_vers_url(adresse)
+	set_meta("infos", infos)
+	var cible := decouper_adresse(adresse)
+	if cible.url != "":
+		_essais = [cible.url]
+	elif cible.hote.is_valid_ip_address():
+		_essais = [url_de(cible.hote, cible.port)]
+	else:
+		# Un nom (duckdns…) peut avoir une adresse IPv6 et une IPv4 : on essaie les deux.
+		var ips := IP.resolve_hostname_addresses(cible.hote, IP.TYPE_ANY)
+		if ips.is_empty():
+			echec.emit("Adresse introuvable : %s.\nVérifie l'orthographe et la connexion Internet de l'appareil." % cible.hote)
+			return
+		var v6 := []
+		var v4 := []
+		for ip in ips:
+			(v6 if ":" in ip else v4).append(url_de(ip, cible.port))
+		_essais = v6 + v4
+	_tentes = []
+	_essayer_suivant()
+
+
+## Essaie l'adresse suivante de la liste (IPv6 puis IPv4), ou abandonne.
+func _essayer_suivant() -> void:
+	_fermer_peer()
+	if _essais.is_empty():
+		_limite_connexion = 0.0
+		echec.emit(_message_echec())
+		return
+	var url: String = _essais.pop_front()
+	_tentes.append(url)
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.inbound_buffer_size = 1 << 21 # les morceaux du monde arrivent par paquets
-	var err := peer.create_client(url)
-	if err != OK:
-		echec.emit("Adresse invalide : %s" % url)
+	if peer.create_client(url) != OK:
+		_essayer_suivant.call_deferred()
 		return
 	multiplayer.multiplayer_peer = peer
-	_limite_connexion = Time.get_ticks_msec() + 8000
+	_limite_connexion = Time.get_ticks_msec() + DELAI_ESSAI
+	tentative.emit(url)
 	if not multiplayer.connected_to_server.is_connected(_sur_connecte):
 		multiplayer.connected_to_server.connect(_sur_connecte)
 		multiplayer.connection_failed.connect(_sur_echec)
 		multiplayer.server_disconnected.connect(_sur_deconnexion)
-	set_meta("infos", infos)
 
 
-static func adresse_vers_url(adresse: String) -> String:
+func _message_echec() -> String:
+	var essaye := ", ".join(PackedStringArray(_tentes)).replace("ws://", "")
+	return ("Impossible de joindre le serveur (%s).\n" % essaye
+		+ "Même Wi-Fi que le serveur : mets l'adresse locale du PC (192.168…).\n"
+		+ "Depuis Internet : l'adresse IPv6 ou IPv4 publique affichée dans le panneau du serveur.")
+
+
+## Découpe ce que le joueur a tapé : nom, IPv4, IPv6 (avec ou sans crochets), port facultatif.
+## Renvoie {hote, port, url} ; url n'est rempli que si le joueur a tapé une adresse ws:// complète.
+static func decouper_adresse(adresse: String) -> Dictionary:
 	adresse = adresse.strip_edges()
+	var r := {"hote": "", "port": Config.PORT_DEFAUT, "url": ""}
 	if adresse.begins_with("ws://") or adresse.begins_with("wss://"):
-		return adresse
+		r.url = adresse
+		return r
 	if adresse == "":
 		adresse = "localhost"
-	if not ":" in adresse:
-		adresse += ":%d" % Config.PORT_DEFAUT
-	return "ws://" + adresse
+	if adresse.begins_with("["): # [2a01:…]:8000
+		var fin := adresse.find("]")
+		r.hote = adresse.substr(1, fin - 1) if fin > 0 else adresse.substr(1)
+		var reste := adresse.substr(fin + 1) if fin > 0 else ""
+		if reste.begins_with(":") and reste.substr(1).is_valid_int():
+			r.port = int(reste.substr(1))
+	elif adresse.count(":") > 1: # IPv6 sans crochets : pas de port possible
+		r.hote = adresse
+	elif ":" in adresse:
+		r.hote = adresse.get_slice(":", 0)
+		if adresse.get_slice(":", 1).is_valid_int():
+			r.port = int(adresse.get_slice(":", 1))
+	else:
+		r.hote = adresse
+	r.hote = r.hote.get_slice("%", 0) if not r.hote.begins_with("fe80") else r.hote
+	return r
+
+
+static func url_de(hote: String, port: int) -> String:
+	return "ws://%s:%d" % ["[%s]" % hote if ":" in hote else hote, port]
+
+
+## Adresse lisible, pour l'afficher.
+static func adresse_vers_url(adresse: String) -> String:
+	var c := decouper_adresse(adresse)
+	return c.url if c.url != "" else url_de(c.hote, c.port)
+
+
+func _fermer_peer() -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
+		multiplayer.multiplayer_peer.close()
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 
 
 func fermer() -> void:
 	_limite_connexion = 0.0
-	if multiplayer.multiplayer_peer and not multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
-		multiplayer.multiplayer_peer.close()
-	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	_essais = []
+	_fermer_peer()
 
 
 func est_connecte() -> bool:
@@ -71,20 +142,18 @@ func _process(_delta: float) -> void:
 	if _limite_connexion > 0.0 and Time.get_ticks_msec() > _limite_connexion:
 		_limite_connexion = 0.0
 		if not est_connecte():
-			fermer()
-			echec.emit("Le serveur ne répond pas. Vérifie l'adresse et que le serveur est lancé.")
+			_essayer_suivant()
 
 
 func _sur_connecte() -> void:
 	_limite_connexion = 0.0
+	_essais = []
 	c_bonjour.rpc_id(1, get_meta("infos", {}))
 	connecte.emit()
 
 
 func _sur_echec() -> void:
-	_limite_connexion = 0.0
-	fermer()
-	echec.emit("Connexion impossible.")
+	_essayer_suivant()
 
 
 func _sur_deconnexion() -> void:

@@ -10,6 +10,7 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 | 0 | Fondations : serveur, connexion, déplacement, sauvegarde, programme de gestion, publication | ✅ v0.0.1 |
 | 1 | Rôles et combat : 6 rôles, visée au sol, tir chargé, esquive, équipes, mannequins | ✅ v0.1.0 |
 | 2 | La carte : monde infini par morceaux, 10 biomes, danger selon la distance, minicarte et grande carte | ✅ v0.2.0 |
+| 2.1 | Correctif réseau : IPv6, essai IPv6 puis IPv4, adresses à donner dans le panneau, pare-feu | ✅ v0.2.1 |
 | 3 | Ressources, inventaire, mort | à venir |
 | … | voir la feuille de route du document de conception | |
 
