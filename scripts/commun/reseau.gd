@@ -98,8 +98,18 @@ func c_bonjour(infos: Dictionary) -> void:
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func c_entree(seq: int, dir: Vector2) -> void:
-	if serveur: serveur.sur_entree(multiplayer.get_remote_sender_id(), seq, dir)
+func c_entree(seq: int, dir: Vector2, boutons: int) -> void:
+	if serveur: serveur.sur_entree(multiplayer.get_remote_sender_id(), seq, dir, boutons)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_action(genre: String, cible: Vector2, charge: float) -> void:
+	if serveur: serveur.sur_action(multiplayer.get_remote_sender_id(), genre, cible, charge)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_role(role: String) -> void:
+	if serveur: serveur.sur_role(multiplayer.get_remote_sender_id(), role)
 
 
 @rpc("any_peer", "call_remote", "reliable")

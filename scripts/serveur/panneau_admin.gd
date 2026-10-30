@@ -15,6 +15,8 @@ var _heure: HSlider
 var _vitesse_temps: SpinBox
 var _mode_dev: CheckButton
 var _cheats: CheckButton
+var _pvp: CheckButton
+var _labels_vie := {} # pseudo -> Label (vie mise à jour chaque seconde)
 var _mdp: LineEdit
 var _motd: LineEdit
 var _nom: LineEdit
@@ -46,6 +48,9 @@ func _ready() -> void:
 	onglets.add_child(_onglet_monde())
 	onglets.add_child(_onglet_boss())
 	onglets.add_child(_onglet_console())
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--onglet="): # option de test : ouvrir un onglet précis
+			onglets.current_tab = int(arg.get_slice("=", 1))
 	serveur.journal_ajoute.connect(_sur_journal)
 	serveur.etat_change.connect(func(): _a_rafraichir = true)
 	var minuteur := Timer.new()
@@ -223,7 +228,18 @@ func _onglet_joueurs() -> Control:
 	return v
 
 
+func _texte_vie(s: Dictionary) -> String:
+	return "%s %d/%d%s" % [Roles.donnees(s.role).nom, s.vie, s.vie_max, " (mort)" if s.mort else ""]
+
+
+func _label_vie(s: Dictionary) -> Label:
+	var l := _label(_texte_vie(s), 190)
+	_labels_vie[s.nom] = l
+	return l
+
+
 func _rafraichir_joueurs() -> void:
+	_labels_vie.clear()
 	_vider(_liste_joueurs)
 	if serveur.joueurs.is_empty():
 		_liste_joueurs.add_child(_label("Personne n'est connecté."))
@@ -232,7 +248,12 @@ func _rafraichir_joueurs() -> void:
 		var admin: bool = serveur.est_admin(nom)
 		var vitesse_x2: bool = s.vitesse > 1.0
 		_liste_joueurs.add_child(_ligne([
-			_label(nom + (" [admin]" if admin else ""), 170),
+			_label(nom + (" [admin]" if admin else ""), 150),
+			_label_vie(s),
+			_bouton("Soigner", func(): serveur.combat.soigner(serveur.session_par_nom(nom), 9999)),
+			_bouton("Tuer", func():
+				var cible: Dictionary = serveur.session_par_nom(nom)
+				if not cible.is_empty() and not cible.mort: serveur.combat.mourir(cible, "l'admin")),
 			_bouton("Retirer admin" if admin else "Rendre admin", func(): serveur.definir_admin(nom, not admin)),
 			_bouton("TP au centre", func(): serveur.teleporter(serveur.session_par_nom(nom), serveur.monde.centre())),
 			_bouton("Vitesse x1" if vitesse_x2 else "Vitesse x2", func(): serveur.definir_cheat(serveur.session_par_nom(nom), "vitesse", 1.0 if vitesse_x2 else 2.0)),
@@ -282,6 +303,17 @@ func _onglet_monde() -> Control:
 	_cheats.text = "Triches autorisées pour les admins en jeu (/tp, /vitesse, /vol, /dieu)"
 	_cheats.toggled.connect(func(on): if not _maj_en_cours: serveur.definir_reglage("cheats", on))
 	v.add_child(_cheats)
+	_pvp = CheckButton.new()
+	_pvp.text = "Combats entre joueurs (PvP) autorisés"
+	_pvp.toggled.connect(func(on): if not _maj_en_cours: serveur.definir_reglage("pvp", on))
+	v.add_child(_pvp)
+	v.add_child(_ligne([
+		_bouton("Ajouter un mannequin près du feu de camp", func(): serveur.combat.ajouter_mannequin(serveur.monde.point_libre(serveur.monde.centre() + Vector2(randf_range(-150, 150), randf_range(60, 150))))),
+		_bouton("Retirer tous les mannequins", serveur.combat.retirer_mannequins),
+		_bouton("Remettre les mannequins de départ", func():
+			serveur.combat.retirer_mannequins()
+			serveur.combat.mannequins_par_defaut()),
+	]))
 	var aide := _label("Les triches par joueur se règlent dans l'onglet Joueurs ou avec les commandes (onglet Console).")
 	aide.modulate.a = 0.6
 	v.add_child(aide)
@@ -402,9 +434,14 @@ func _chaque_seconde() -> void:
 	_vitesse_temps.value = float(serveur.donnees.reglages.vitesse_temps)
 	_mode_dev.button_pressed = serveur.donnees.reglages.mode_dev
 	_cheats.button_pressed = serveur.donnees.reglages.cheats
+	_pvp.button_pressed = serveur.donnees.reglages.get("pvp", true)
 	_maj_en_cours = false
 	_carte.queue_redraw()
 	if _a_rafraichir:
 		_a_rafraichir = false
 		_rafraichir_joueurs()
 		_rafraichir_boss()
+	for nom in _labels_vie:
+		var sj: Dictionary = serveur.session_par_nom(nom)
+		if not sj.is_empty() and is_instance_valid(_labels_vie[nom]):
+			_labels_vie[nom].text = _texte_vie(sj)

@@ -17,8 +17,22 @@ Se connecter
   (exemple : 86.12.34.56, ou monserveur.duckdns.org). Le port 8000 est ajouté tout seul.
   Sur le même réseau que le serveur, l'adresse locale du PC suffit (exemple : 192.168.1.20).
 
-Commandes
-  ZQSD ou flèches : se déplacer (joystick à gauche de l'écran sur téléphone)
+Commandes sur PC
+  ZQSD ou flèches : se déplacer
+  Clic gauche : attaque (garder appuyé pour charger l'arc, ou pour frapper en continu)
+  Clic droit ou E : compétence (garder appuyé pour voir la zone, relâcher pour lancer)
+  Espace : esquive (invincible pendant l'esquive)
+  R : changer de rôle (pas en plein combat)
   Entrée : écrire dans le chat. /aide affiche les commandes.
   F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
   Échap : menu
+
+Commandes sur téléphone
+  Joystick : poser le doigt n'importe où sur la moitié gauche de l'écran.
+  Gros bouton à droite : attaque. Un appui rapide vise l'ennemi le plus proche ;
+  faire glisser le doigt depuis le bouton permet de viser (et de charger l'arc).
+  Étoile : compétence, même principe. Flèches bleues : esquive.
+
+Équipes
+  /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,
+  et les soins du mage ou du paladin ne touchent que l'équipe. /equipe quitter pour jouer seul.

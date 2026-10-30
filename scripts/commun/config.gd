@@ -3,7 +3,7 @@ extends Node
 
 ## À augmenter à chaque changement des messages réseau : un client et un serveur
 ## de protocoles différents refusent de jouer ensemble.
-const PROTOCOLE := 1
+const PROTOCOLE := 2
 
 const PORT_DEFAUT := 8000
 const TAILLE_TUILE := 32
@@ -24,6 +24,8 @@ var auto_deplacement := false
 var capture := ""
 ## Option de test : --auto-commande=texte envoie ce texte dans le chat après la connexion.
 var auto_commande := ""
+## Option de test : --tactile affiche l'interface du téléphone sur PC.
+var forcer_tactile := false
 
 
 func _enter_tree() -> void:
@@ -40,13 +42,15 @@ func _enter_tree() -> void:
 			capture = a.get_slice("=", 1)
 		elif a.begins_with("--auto-commande="):
 			auto_commande = a.substr(a.find("=") + 1)
+		elif a == "--tactile":
+			forcer_tactile = true
 		elif a == "--auto-deplacement":
 			auto_deplacement = true
 	_creer_touches()
 
 
 func est_mobile() -> bool:
-	return OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
+	return forcer_tactile or OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 
 
 func _creer_touches() -> void:
@@ -58,6 +62,9 @@ func _creer_touches() -> void:
 	_action("chat", [KEY_ENTER, KEY_KP_ENTER])
 	_action("debug", [KEY_F3])
 	_action("menu", [KEY_ESCAPE])
+	_action("esquive", [KEY_SPACE, KEY_SHIFT])
+	_action("competence", [KEY_E])
+	_action("role", [KEY_R])
 
 
 func _action(nom: String, touches: Array) -> void:

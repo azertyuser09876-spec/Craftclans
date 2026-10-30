@@ -7,8 +7,8 @@ extends RefCounted
 
 var serveur: Node
 
-const PUBLIQUES := ["aide", "joueurs", "boss", "login", "moi"]
-const TRICHES := ["tp", "vitesse", "vol", "dieu"]
+const PUBLIQUES := ["aide", "joueurs", "boss", "login", "moi", "equipe", "role", "roles"]
+const TRICHES := ["tp", "vitesse", "vol", "dieu", "soigner"]
 
 const AIDE := """Commandes :
   aide                      cette aide
@@ -16,6 +16,9 @@ const AIDE := """Commandes :
   moi                       ta position et tes droits
   login <mot de passe>      devenir admin (mot de passe dans le panneau du serveur)
   boss                      état des boss mondiaux
+  role <rôle>               changer de rôle (hors combat) ; roles : la liste
+  equipe <nom>              rejoindre ou créer une équipe (pas de tirs amis)
+  equipe quitter            jouer seul
 Admin :
   annonce <texte>           message à tout le serveur
   expulser <joueur> [raison]
@@ -25,6 +28,11 @@ Admin :
   devmode oui|non           mode développeur pour tous
   cheats oui|non            autoriser les triches des admins
   sauver                    sauvegarder maintenant
+  pvp oui|non               autoriser les combats entre joueurs
+  tuer <joueur>
+  role <joueur> <rôle>      changer le rôle d'un joueur (même en combat)
+  mannequin                 ajouter un mannequin d'entraînement à ta position
+  mannequins retirer        retirer tous les mannequins
   monde                     infos sur le monde
   boss activer|endormir <id>
   boss programmer <id> <AAAA-MM-JJ> <HH:MM>
@@ -34,7 +42,8 @@ Triche (admin, triches autorisées) :
   tp [joueur] <x> <y>  ou  tp [joueur] <autre joueur>   (x, y en cases)
   vitesse [joueur] <multiplicateur>
   vol [joueur]              traverser les obstacles et l'eau
-  dieu [joueur]             invincible (utile à partir de l'étape 1)"""
+  dieu [joueur]             invincible
+  soigner [joueur]          remet la vie au maximum"""
 
 
 func _init(p_serveur: Node) -> void:
@@ -119,6 +128,53 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 				int(d.graine), d.get("cree_le", "?"), Sauvegarde.FORMAT, d.joueurs.size(), d.heure]
 		"boss":
 			return _boss(args)
+		"roles":
+			var lignes := []
+			for r in Roles.ORDRE:
+				lignes.append("  %s : %s" % [r, Roles.LISTE[r].description])
+			return "Rôles :\n" + _joindre(lignes, "\n")
+		"role":
+			if args.is_empty():
+				return "Utilisation : role <rôle>. Rôles : " + _joindre(Roles.ORDRE, ", ")
+			if args.size() >= 2 and (console or serveur.est_admin(auteur.nom)):
+				var cible_r: Dictionary = serveur.session_par_nom(args[0])
+				if cible_r.is_empty(): return "Joueur introuvable."
+				return serveur.combat.changer_role(cible_r, args[1].to_lower(), true)
+			if console: return "Utilisation : role <joueur> <rôle>"
+			return serveur.combat.changer_role(auteur, args[0].to_lower())
+		"equipe":
+			if console: return "Commande pour les joueurs."
+			if args.is_empty():
+				return "Ton équipe : %s" % (auteur.equipe if auteur.equipe != "" else "aucune (tu joues seul)")
+			var nom_eq: String = "" if args[0] == "quitter" else _joindre(args).left(20)
+			auteur.equipe = nom_eq
+			serveur.donnees.joueurs[auteur.nom]["equipe"] = nom_eq
+			serveur.annoncer_joueur(auteur)
+			serveur.envoyer_reglages(auteur.id)
+			return "Tu joues seul." if nom_eq == "" else "Tu es dans l'équipe %s." % nom_eq
+		"pvp":
+			var v := args.is_empty() or _oui(args[0])
+			serveur.definir_reglage("pvp", v)
+			return "Combats entre joueurs %s." % ("activés" if v else "désactivés")
+		"tuer":
+			if args.is_empty(): return "Utilisation : tuer <joueur>"
+			var cible_t: Dictionary = serveur.session_par_nom(args[0])
+			if cible_t.is_empty(): return "Joueur introuvable."
+			if not cible_t.mort:
+				serveur.combat.mourir(cible_t, "l'admin")
+			return "%s est mort." % cible_t.nom
+		"soigner":
+			var cible_s := _cible(args, auteur)
+			if cible_s.s.is_empty(): return "Utilisation : soigner [joueur]"
+			serveur.combat.soigner(cible_s.s, 9999)
+			return "%s est soigné." % cible_s.s.nom
+		"mannequin":
+			var pos: Vector2 = serveur.monde.centre() if console else auteur.pos + Vector2(0, 40)
+			serveur.combat.ajouter_mannequin(pos)
+			return "Mannequin ajouté."
+		"mannequins":
+			serveur.combat.retirer_mannequins()
+			return "Mannequins retirés."
 		"tp":
 			return _tp(args, auteur)
 		"vitesse":

@@ -14,6 +14,7 @@ var donnees: Dictionary
 var sauvegarde := Sauvegarde.new()
 var monde: Monde
 var commandes: Commandes
+var combat: Combat
 var actif := false
 var demarre_le := 0
 var derniere_sauvegarde := ""
@@ -40,6 +41,8 @@ func _ready() -> void:
 		journal("Le serveur ne démarre pas pour ne pas abîmer la sauvegarde.")
 		return
 	monde = Monde.new(int(donnees.graine))
+	combat = Combat.new(self)
+	combat.mannequins_par_defaut()
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
 	var err := peer.create_server(port)
@@ -108,6 +111,7 @@ func _physics_process(delta: float) -> void:
 			multiplayer.multiplayer_peer.disconnect_peer(id)
 	for s in joueurs.values():
 		s.budget = minf(s.budget + 60.0 * delta, 30.0)
+	combat.tick(delta)
 	var heure: float = donnees.heure + delta * 24.0 / Config.DUREE_JOURNEE * float(donnees.reglages.vitesse_temps)
 	donnees.heure = fmod(heure, 24.0)
 	_accu_etat += delta
@@ -130,8 +134,11 @@ func _envoyer_etat() -> void:
 	var positions := {}
 	for id in joueurs:
 		var s: Dictionary = joueurs[id]
-		positions[id] = [s.pos.x, s.pos.y, s.seq]
-	var etat := {"h": donnees.heure, "j": positions}
+		positions[id] = [s.pos.x, s.pos.y, s.seq, s.vie, s.vie_max, combat.drapeaux(s), s.mvt.dash_f, s.mvt.dash_cd]
+	var vies := {}
+	for m in combat.mannequins.values():
+		vies[m.id] = m.vie
+	var etat := {"h": donnees.heure, "j": positions, "m": vies}
 	for id in joueurs:
 		Reseau.s_etat.rpc_id(id, etat)
 
@@ -151,6 +158,8 @@ func _memoriser(s: Dictionary) -> void:
 	var fiche: Dictionary = donnees.joueurs.get(s.nom, {})
 	fiche["pos"] = [s.pos.x, s.pos.y]
 	fiche["apparence"] = s.apparence
+	fiche["role"] = s.role
+	fiche["equipe"] = s.equipe
 	fiche["vu_le"] = Time.get_datetime_string_from_system(false, true)
 	donnees.joueurs[s.nom] = fiche
 
@@ -229,8 +238,9 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	var s := {
 		"id": id, "nom": nom, "pos": pos, "seq": 0, "budget": 30.0,
 		"apparence": clampi(int(infos.get("apparence", 0)), 0, Config.NB_APPARENCES - 1),
-		"vitesse": 1.0, "vol": false, "dieu": false,
+		"vitesse": 1.0, "vol": false, "dieu": false, "mvt": Regles.nouvel_etat(pos),
 	}
+	combat.preparer_session(s, fiche)
 	joueurs[id] = s
 	var autres := {}
 	for autre_id in joueurs:
@@ -239,7 +249,8 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	Reseau.s_accueil.rpc_id(id, {
 		"id": id, "nom": nom, "apparence": s.apparence, "graine": int(donnees.graine), "heure": donnees.heure, "pos": pos,
 		"version": Config.version, "serveur": config.nom, "motd": config.message_du_jour,
-		"joueurs": autres, "boss_actifs": boss_actifs(),
+		"joueurs": autres, "boss_actifs": boss_actifs(), "mannequins": combat.infos_mannequins(),
+		"nouveau": nouveau,
 	})
 	envoyer_reglages(id)
 	for autre_id in joueurs:
@@ -251,10 +262,18 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 
 
 func _infos_publiques(s: Dictionary) -> Dictionary:
-	return {"nom": s.nom, "pos": s.pos, "apparence": s.apparence, "admin": est_admin(s.nom)}
+	return {"nom": s.nom, "pos": s.pos, "apparence": s.apparence, "admin": est_admin(s.nom),
+		"role": s.role, "equipe": s.equipe}
 
 
-func sur_entree(id: int, seq: int, dir: Vector2) -> void:
+## Prévient tout le monde (y compris le joueur) d'un changement de rôle, d'équipe…
+func annoncer_joueur(s: Dictionary) -> void:
+	for id in joueurs:
+		Reseau.s_joueur.rpc_id(id, s.id, _infos_publiques(s))
+	etat_change.emit()
+
+
+func sur_entree(id: int, seq: int, dir: Vector2, boutons: int) -> void:
 	var s: Dictionary = joueurs.get(id, {})
 	if s.is_empty() or seq <= s.seq:
 		return
@@ -262,13 +281,26 @@ func sur_entree(id: int, seq: int, dir: Vector2) -> void:
 	if s.budget < 1.0:
 		return # trop d'entrées : protection contre l'accélération par triche
 	s.budget -= 1.0
-	if not dir.is_finite():
+	if not dir.is_finite() or s.mort:
 		return
-	s.pos = Regles.deplacer(monde, s.pos, dir.limit_length(1.0), vitesse_de(s), s.vol)
+	Regles.pas(monde, s.mvt, dir.limit_length(1.0), boutons & 1 != 0, combat.vitesse(s), s.vol, combat.recharge_esquive(s))
+	s.pos = s.mvt.pos
+
+
+func sur_action(id: int, genre: String, cible: Vector2, charge: float) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		combat.action(s, genre, cible, charge)
+
+
+func sur_role(id: int, role: String) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		Reseau.s_message.rpc_id(id, combat.changer_role(s, role), "commande")
 
 
 func vitesse_de(s: Dictionary) -> float:
-	return Config.VITESSE_JOUEUR * float(s.vitesse)
+	return combat.vitesse(s)
 
 
 func sur_chat(id: int, texte: String) -> void:
@@ -315,6 +347,8 @@ func envoyer_reglages(id: int) -> void:
 	Reseau.s_reglages.rpc_id(id, {
 		"mode_dev": donnees.reglages.mode_dev, "cheats": donnees.reglages.cheats,
 		"admin": est_admin(s.nom), "vitesse": vitesse_de(s), "vol": s.vol, "dieu": s.dieu,
+		"pvp": donnees.reglages.get("pvp", true), "role": s.role, "equipe": s.equipe,
+		"esquive": combat.recharge_esquive(s),
 	})
 
 
@@ -384,6 +418,8 @@ func oublier_joueur(nom: String) -> bool:
 
 func teleporter(s: Dictionary, pos: Vector2) -> void:
 	s.pos = monde.point_libre(pos) if not s.vol else pos
+	s.mvt.pos = s.pos
+	s.mvt.dash_f = 0
 	Reseau.s_teleport.rpc_id(s.id, s.pos)
 
 
@@ -412,6 +448,8 @@ func reinitialiser_monde() -> void:
 		donnees.joueurs[nom] = {"jeton": anciens[nom].get("jeton", ""), "admin": anciens[nom].get("admin", false)}
 	donnees.bannis = bannis
 	monde = Monde.new(int(donnees.graine))
+	combat.retirer_mannequins()
+	combat.mannequins_par_defaut()
 	sauver()
 	journal("Nouveau monde créé (graine %d). L'ancien est dans les archives." % int(donnees.graine))
 	etat_change.emit()

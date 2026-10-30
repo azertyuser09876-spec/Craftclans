@@ -19,6 +19,8 @@ var sol: TileMapLayer
 ## Les personnages s'ajoutent ici pour être triés avec les arbres et les rochers.
 var objets: Node2D
 var nuit: CanvasModulate
+var arbres := {} # case -> Sprite2D (arbres et sapins, rendus transparents quand on passe derrière)
+var _transparents: Array = []
 var _lumieres: Array[PointLight2D] = []
 
 
@@ -65,6 +67,8 @@ func _ready() -> void:
 			spr.flip_h = rng.randf() < 0.5
 			if d == Monde.Deco.FLEURS:
 				spr.z_index = -1 # au ras du sol
+			if d in [Monde.Deco.ARBRE, Monde.Deco.SAPIN]:
+				arbres[Vector2i(x, y)] = spr
 			objets.add_child(spr)
 	nuit = CanvasModulate.new()
 	add_child(nuit)
@@ -110,6 +114,20 @@ func _ajouter_feu(pied: Vector2) -> void:
 	lum.position = Vector2(0, -10)
 	feu.add_child(lum)
 	_lumieres.append(lum)
+
+
+## Rend transparents les arbres qui cachent ce point (le joueur local).
+func voir_a_travers(pos: Vector2) -> void:
+	for spr in _transparents:
+		spr.modulate.a = 1.0
+	_transparents.clear()
+	var c := Vector2i(pos / Config.TAILLE_TUILE)
+	for dy in range(1, 3):
+		for dx in range(-1, 2):
+			var spr: Sprite2D = arbres.get(c + Vector2i(dx, dy))
+			if spr and spr.position.y > pos.y and absf(spr.position.x - pos.x) < 28.0:
+				spr.modulate.a = 0.45
+				_transparents.append(spr)
 
 
 ## Couleur de la lumière ambiante selon l'heure (0 à 24).

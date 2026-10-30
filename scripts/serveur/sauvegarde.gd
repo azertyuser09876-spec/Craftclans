@@ -42,7 +42,7 @@ static func monde_vierge() -> Dictionary:
 		"joueurs": {}, # par pseudo
 		"bannis": {}, # pseudo -> raison
 		"boss": {}, # id -> état
-		"reglages": {"mode_dev": false, "cheats": true, "vitesse_temps": 1.0},
+		"reglages": {"mode_dev": false, "cheats": true, "vitesse_temps": 1.0, "pvp": true},
 	}
 
 

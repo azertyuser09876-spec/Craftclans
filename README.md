@@ -8,7 +8,7 @@ Le document de conception complet est dans les fichiers du projet Claude (`conce
 | Étape | Contenu | État |
 |---|---|---|
 | 0 | Fondations : serveur, connexion, déplacement, sauvegarde, programme de gestion, publication | ✅ v0.0.1 |
-| 1 | Rôles et combat | à venir |
+| 1 | Rôles et combat : 6 rôles, visée au sol, tir chargé, esquive, équipes, mannequins | ✅ v0.1.0 |
 | 2 | La carte (monde infini, biomes, jour/nuit) | à venir |
 | … | voir la feuille de route du document de conception | |
 
@@ -29,14 +29,17 @@ scripts/commun/   partagé par le jeu et le serveur
   reseau.gd         tous les messages réseau (WebSocket, port 8000)
   monde.gd          génération du terrain à partir d'une graine, collisions
   regles.gd         règles de déplacement (appliquées par le serveur, prédites par le jeu)
+  roles.gd          les rôles et leurs capacités (vie, dégâts, portées, recharges)
   donnees_boss.gd   liste des boss mondiaux
 scripts/serveur/  serveur dédié
   serveur.gd        logique du serveur (il fait autorité sur tout)
   sauvegarde.gd     sauvegarde versionnée, migrations, archives, copies de secours
+  combat.gd         vie, dégâts, projectiles, zones, effets, mort et réapparition
   commandes.gd      commandes admin, triches, boss (console et chat /aide)
   panneau_admin.gd  fenêtre de gestion du serveur
 scripts/client/   le jeu
-  menu.gd, jeu.gd, vue_monde.gd, joueur_visuel.gd, joystick.gd, theme_jeu.gd
+  menu.gd, jeu.gd, vue_monde.gd, joueur_visuel.gd, joystick.gd, theme_jeu.gd,
+  effets.gd, barre_combat.gd, mannequin_visuel.gd
 assets/           images (générées par outils/generer_assets.py)
 distribution/     fichiers ajoutés aux zips (lisez-moi, .bat du serveur)
 outils/           générateur d'assets, script de version
@@ -92,4 +95,5 @@ python outils/generer_assets.py
 ## Options de test
 
 `--auto-connexion=Pseudo@adresse`, `--auto-deplacement`, `--auto-commande="/heure 21;/devmode oui"`,
-`--capture=fichier.png:secondes`, `--port=8001`.
+`--capture=fichier.png:secondes`, `--port=8001`, `--tactile` (interface téléphone sur PC),
+`--onglet=N` (serveur : ouvre un onglet du panneau).
