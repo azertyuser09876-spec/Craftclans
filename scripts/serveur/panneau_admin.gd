@@ -264,7 +264,7 @@ func _onglet_joueurs() -> Control:
 
 
 func _texte_vie(s: Dictionary) -> String:
-	return "%s %d/%d%s" % [Roles.donnees(s.role).nom, s.vie, s.vie_max, " (mort)" if s.mort else ""]
+	return "%s niv %d, %d/%d%s" % [Roles.donnees(s.role).nom, int(s.progression.niveau), s.vie, s.vie_max, " (mort)" if s.mort else ""]
 
 
 func _label_vie(s: Dictionary) -> Label:
@@ -289,6 +289,9 @@ func _rafraichir_joueurs() -> void:
 			_bouton("Tuer", func():
 				var cible: Dictionary = serveur.session_par_nom(nom)
 				if not cible.is_empty() and not cible.mort: serveur.combat.mourir(cible, "l'admin")),
+			_bouton("Niveau +1", func():
+				var cible_n: Dictionary = serveur.session_par_nom(nom)
+				if not cible_n.is_empty(): serveur.experience.definir_niveau(cible_n, int(cible_n.progression.niveau) + 1)),
 			_bouton("Retirer admin" if admin else "Rendre admin", func(): serveur.definir_admin(nom, not admin)),
 			_bouton("TP au centre", func(): serveur.teleporter(serveur.session_par_nom(nom), serveur.monde.centre())),
 			_bouton("Vitesse x1" if vitesse_x2 else "Vitesse x2", func(): serveur.definir_cheat(serveur.session_par_nom(nom), "vitesse", 1.0 if vitesse_x2 else 2.0)),

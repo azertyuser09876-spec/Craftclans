@@ -71,6 +71,8 @@ const TEX_CORPS := preload("res://assets/objets/corps.png")
 var inventaire: Array = []
 var equipement := {}
 var _fabrication_vue: FabricationVue
+var _personnage_vue: PersonnageVue
+var progression := {}
 var _accu_stations := 0.0
 var sacs := {} # id -> {infos, noeud}
 var _inventaire_vue: InventaireVue
@@ -137,6 +139,7 @@ func _ready() -> void:
 		_inventaire_vue.afficher(inv, equip)
 		_fabrication_vue.maj(inv, _fabrication_vue.stations))
 	Reseau.recolte_recue.connect(func(p, _c): _recolte_progres = p)
+	Reseau.progression_recue.connect(_sur_progression)
 	Reseau.sacs_recus.connect(func(liste):
 		for infos_sac in liste:
 			_ajouter_sac(infos_sac))
@@ -152,7 +155,13 @@ func _ready() -> void:
 			if c.begins_with("@"):
 				delai = float(c.get_slice(" ", 0).substr(1))
 				c = c.substr(c.find(" ") + 1)
-			if c.begins_with("!"): # « !fabriquer etabli » : action d'atelier (tests)
+			if c.begins_with("#"): # « #personnage » : ouvre une fenêtre (tests, captures)
+				var f: Control = {"inventaire": _inventaire_vue, "fabriquer": _fabrication_vue, "personnage": _personnage_vue}.get(c.substr(1).strip_edges())
+				if f:
+					get_tree().create_timer(delai).timeout.connect(_basculer_fenetre.bind(f))
+			elif c.begins_with("?"): # « ?carac vie » : progression (tests)
+				get_tree().create_timer(delai).timeout.connect(Reseau.c_progression.rpc_id.bind(1, c.substr(1).get_slice(" ", 0), c.get_slice(" ", 1)))
+			elif c.begins_with("!"): # « !fabriquer etabli » : action d'atelier (tests)
 				get_tree().create_timer(delai).timeout.connect(Reseau.c_atelier.rpc_id.bind(1, c.substr(1).get_slice(" ", 0), c.get_slice(" ", 1)))
 			else:
 				get_tree().create_timer(delai).timeout.connect(Reseau.c_chat.rpc_id.bind(1, c))
@@ -160,7 +169,8 @@ func _ready() -> void:
 
 func _en_jeu() -> bool:
 	return not _saisie.has_focus() and not _menu_pause.visible and not _choix_role.visible \
-		and not _grande_carte.visible and not _inventaire_vue.visible and not _fabrication_vue.visible
+		and not _grande_carte.visible and not _inventaire_vue.visible and not _fabrication_vue.visible \
+		and not _personnage_vue.visible
 
 
 # ------------------------------------------------------------------ Boucle
@@ -312,6 +322,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_inventaire_vue.visible = false
 		elif _fabrication_vue.visible:
 			_fabrication_vue.visible = false
+		elif _personnage_vue.visible:
+			_personnage_vue.visible = false
 		else:
 			_menu_pause.visible = not _menu_pause.visible
 	elif event.is_action_pressed("inventaire") and not _saisie.has_focus() and not _menu_pause.visible:
@@ -319,6 +331,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("fabriquer") and not _saisie.has_focus() and not _menu_pause.visible:
 		_basculer_fenetre(_fabrication_vue)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("personnage") and not _saisie.has_focus() and not _menu_pause.visible:
+		_basculer_fenetre(_personnage_vue)
 		get_viewport().set_input_as_handled()
 	elif not _en_jeu() or _visee_tactile:
 		return
@@ -352,7 +367,9 @@ func _unhandled_input(event: InputEvent) -> void:
 # ------------------------------------------------------------------ Combat
 
 func _capacite(genre: String) -> Dictionary:
-	return Roles.donnees(reglages.role)[genre]
+	# Capacités modifiées par l'arbre de compétences (envoyées par le serveur).
+	var caps: Dictionary = reglages.get("caps", {})
+	return caps[genre] if caps.has(genre) else Roles.donnees(reglages.role)[genre]
 
 
 func _charge() -> float:
@@ -562,8 +579,20 @@ func _sur_reglages(r: Dictionary) -> void:
 		_pret = {"attaque": 0.0, "competence": 0.0}
 	moi.equipe = reglages.equipe
 	_inventaire_vue.maj_stats(reglages.get("stats", {}))
+	_personnage_vue.maj(progression, reglages.role, reglages.get("stats", {}), inventaire)
 	for a in autres.values():
 		_maj_allie(a)
+
+
+func _sur_progression(p: Dictionary) -> void:
+	if not progression.is_empty() and int(p.niveau) == int(progression.niveau) and int(p.xp) > int(progression.xp):
+		effets.texte(moi.position + Vector2(0, -44), "+%d xp" % (int(p.xp) - int(progression.xp)), Color(0.55, 0.8, 1.0))
+	progression = p
+	_barre.niveau = int(p.niveau)
+	_barre.part_xp = float(p.xp) / maxf(1.0, float(p.xp_suivant)) if int(p.xp_suivant) > 0 else 1.0
+	_barre.queue_redraw()
+	moi.definir_niveau(int(p.niveau))
+	_personnage_vue.maj(p, reglages.role, reglages.get("stats", {}), inventaire)
 
 
 func _maj_allie(a: JoueurVisuel) -> void:
@@ -585,6 +614,7 @@ func _ajouter_autre(id: int, i: Dictionary) -> void:
 		autres[id] = j
 	j.definir_role(str(i.get("role", "guerrier")))
 	j.definir_arme(str(i.get("arme", "")))
+	j.definir_niveau(int(i.get("niveau", 1)))
 	j.equipe = str(i.get("equipe", ""))
 	_maj_allie(j)
 
@@ -678,6 +708,19 @@ func _sur_evenement(genre: String, d: Dictionary) -> void:
 				for id_objet in d.objets:
 					parts.append("+%d %s" % [d.objets[id_objet], Objets.infos(id_objet).nom])
 				effets.texte(d.pos, ", ".join(PackedStringArray(parts)), Color(1, 0.95, 0.6))
+		"niveau":
+			var v := _visuel(int(d.id))
+			if v:
+				effets.anneau(v.position, 34.0, Color(1, 0.85, 0.3, 0.95))
+				effets.explosion(v.position + Vector2(0, -12), "impact", 0.9)
+				effets.texte(v.position + Vector2(0, -30), "Niveau %d !" % int(d.niveau), Color(1, 0.85, 0.3))
+			if int(d.id) == mon_id:
+				_banniere.text = "Niveau %d !\n+%d points de caractéristiques, +%d point de compétence (touche P)" % [
+					int(d.niveau), Progression.POINTS_CARACS_PAR_NIVEAU, Progression.POINTS_COMPETENCE_PAR_NIVEAU]
+				_banniere.modulate.a = 1.0
+				var tw_n := create_tween()
+				tw_n.tween_interval(3.5)
+				tw_n.tween_property(_banniere, "modulate:a", 0.0, 1.2)
 		"mannequin_retire":
 			if mannequins.has(int(d.id)):
 				mannequins[int(d.id)].queue_free()
@@ -760,11 +803,15 @@ func _basculer_fenetre(f: Control) -> void:
 	var ouvrir := not f.visible
 	_inventaire_vue.visible = false
 	_fabrication_vue.visible = false
+	_personnage_vue.visible = false
 	f.visible = ouvrir
 	if ouvrir:
 		_maj_stations()
 		if f == _fabrication_vue:
 			_fabrication_vue.rafraichir()
+		elif f == _personnage_vue:
+			_personnage_vue.maj(progression, reglages.role, reglages.get("stats", {}), inventaire)
+			_personnage_vue.rafraichir()
 
 
 func _maj_stations() -> void:
@@ -950,6 +997,7 @@ func _creer_interface() -> void:
 	var centre := CenterContainer.new()
 	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	centre.z_index = 5 # au-dessus de la mini-carte
 	_ui.add_child(centre)
 	_inventaire_vue = InventaireVue.new()
 	_inventaire_vue.visible = false
@@ -963,6 +1011,10 @@ func _creer_interface() -> void:
 	_fabrication_vue.visible = false
 	_fabrication_vue.fabriquer.connect(func(id): Reseau.c_atelier.rpc_id(1, "fabriquer", id))
 	centre.add_child(_fabrication_vue)
+	_personnage_vue = PersonnageVue.new()
+	_personnage_vue.visible = false
+	_personnage_vue.demande.connect(func(genre, valeur): Reseau.c_progression.rpc_id(1, genre, valeur))
+	centre.add_child(_personnage_vue)
 	_invite = Label.new()
 	_invite.z_index = 30
 	_invite.custom_minimum_size = Vector2(200, 0)
@@ -1001,6 +1053,14 @@ func _creer_interface() -> void:
 		bouton_fab.custom_minimum_size = Vector2(60, 56)
 		bouton_fab.pressed.connect(_basculer_fenetre.bind(_fabrication_vue))
 		_ui.add_child(bouton_fab)
+		var bouton_perso := Button.new()
+		bouton_perso.icon = preload("res://assets/ui/personnage.png")
+		bouton_perso.expand_icon = true
+		bouton_perso.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		bouton_perso.position = Vector2(-510, 10)
+		bouton_perso.custom_minimum_size = Vector2(60, 56)
+		bouton_perso.pressed.connect(_basculer_fenetre.bind(_personnage_vue))
+		_ui.add_child(bouton_perso)
 
 	_lieu = Label.new()
 	_lieu.position = Vector2(12, 30)
@@ -1060,7 +1120,7 @@ func _creer_interface() -> void:
 		_choix_role.visible = true)
 	vb.add_child(changer)
 	var aide := Label.new()
-	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire    C : fabriquer\nEntrée : chat (/aide)    F3 : infos développeur"
+	aide.text = "ZQSD ou flèches : se déplacer\nClic gauche : attaque (maintenir pour charger l'arc)\nClic droit ou E : compétence\nEspace : esquive    R : changer de rôle    M : carte    F : récolter / ramasser    I : inventaire    C : fabriquer    P : personnage\nEntrée : chat (/aide)    F3 : infos développeur"
 	aide.add_theme_font_size_override("font_size", 14)
 	aide.modulate.a = 0.7
 	vb.add_child(aide)
@@ -1103,7 +1163,7 @@ func _creer_choix_role() -> void:
 	fermer.pressed.connect(func(): _choix_role.visible = false)
 	vb.add_child(fermer)
 	var note := Label.new()
-	note.text = "On ne peut pas changer de rôle en plein combat. Touche R pour revenir ici."
+	note.text = "On ne peut pas changer de rôle en plein combat. Changer de rôle rend tes points de compétence (le niveau reste). Touche R pour revenir ici."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate.a = 0.7
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

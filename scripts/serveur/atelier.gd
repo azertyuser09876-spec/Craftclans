@@ -61,6 +61,7 @@ func sur_fabriquer(s: Dictionary, id: String) -> void:
 	s.inventaire = essai
 	serveur.recolte.envoyer_inventaire(s)
 	serveur.combat.evenement("fabrication", {"id": s.id, "pos": s.pos, "objet": recette.objet})
+	serveur.experience.sur_fabrication(s, recette.objet)
 
 
 func sur_equiper(s: Dictionary, case: int) -> void:

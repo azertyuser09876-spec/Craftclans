@@ -34,6 +34,11 @@ var _direction := "bas"
 var _geste := 0.0 # animation d'attaque
 
 
+## Niveau affiché à côté du nom (étape 5).
+func definir_niveau(n: int) -> void:
+	etiquette.text = "%s  [%d]" % [nom, n]
+
+
 func _init(p_nom: String, apparence: int, est_admin := false) -> void:
 	nom = p_nom
 	sprite = AnimatedSprite2D.new()

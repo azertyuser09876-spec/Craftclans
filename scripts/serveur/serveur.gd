@@ -17,6 +17,7 @@ var commandes: Commandes
 var combat: Combat
 var recolte: Recolte
 var atelier: Atelier
+var experience: Experience
 var actif := false
 var demarre_le := 0
 var derniere_sauvegarde := ""
@@ -55,6 +56,7 @@ func _ready() -> void:
 	recolte = Recolte.new(self)
 	recolte.charger(donnees)
 	atelier = Atelier.new(self)
+	experience = Experience.new(self)
 	var port: int = Config.port if Config.port != Config.PORT_DEFAUT else int(config.port)
 	var peer := WebSocketMultiplayerPeer.new()
 	peer.outbound_buffer_size = 1 << 21 # les morceaux du monde partent par paquets
@@ -189,6 +191,7 @@ func _physics_process(delta: float) -> void:
 		s.budget = minf(s.budget + 60.0 * delta, 30.0)
 	combat.tick(delta)
 	recolte.tick(delta)
+	experience.tick(delta)
 	var heure: float = donnees.heure + delta * 24.0 / Config.DUREE_JOURNEE * float(donnees.reglages.vitesse_temps)
 	donnees.heure = fmod(heure, 24.0)
 	_accu_etat += delta
@@ -247,6 +250,7 @@ func _memoriser(s: Dictionary) -> void:
 	fiche["role"] = s.role
 	fiche["equipe"] = s.equipe
 	recolte.memoriser(s, fiche)
+	experience.memoriser(s, fiche)
 	fiche["vu_le"] = Time.get_datetime_string_from_system(false, true)
 	donnees.joueurs[s.nom] = fiche
 
@@ -332,6 +336,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	}
 	combat.preparer_session(s, fiche)
 	recolte.preparer_session(s, fiche)
+	experience.preparer_session(s, fiche)
 	joueurs[id] = s
 	combat.recalculer(s)
 	s.vie = s.vie_max
@@ -347,6 +352,7 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 	})
 	envoyer_reglages(id)
 	recolte.accueillir(s)
+	Reseau.s_progression.rpc_id(id, Experience.resume(s))
 	for autre_id in joueurs:
 		if autre_id != id:
 			Reseau.s_joueur.rpc_id(autre_id, id, _infos_publiques(s))
@@ -358,7 +364,8 @@ func sur_bonjour(id: int, infos: Dictionary) -> void:
 func _infos_publiques(s: Dictionary) -> Dictionary:
 	var arme: Dictionary = s.equipement.get("arme", {})
 	return {"nom": s.nom, "pos": s.pos, "apparence": s.apparence, "admin": est_admin(s.nom),
-		"role": s.role, "equipe": s.equipe, "arme": "" if arme.is_empty() else str(arme.id)}
+		"role": s.role, "equipe": s.equipe, "arme": "" if arme.is_empty() else str(arme.id),
+		"niveau": int(s.progression.niveau)}
 
 
 ## Prévient tout le monde (y compris le joueur) d'un changement de rôle, d'équipe…
@@ -419,6 +426,13 @@ func sur_atelier(id: int, genre: String, valeur: String) -> void:
 		"ameliorer": atelier.sur_ameliorer(s, valeur)
 
 
+## Étape 5 : caractéristiques, compétences, oubli.
+func sur_progression(id: int, genre: String, valeur: String) -> void:
+	var s: Dictionary = joueurs.get(id, {})
+	if not s.is_empty():
+		experience.sur_demande(s, genre, valeur)
+
+
 func sur_role(id: int, role: String) -> void:
 	var s: Dictionary = joueurs.get(id, {})
 	if not s.is_empty():
@@ -474,7 +488,7 @@ func envoyer_reglages(id: int) -> void:
 		"mode_dev": donnees.reglages.mode_dev, "cheats": donnees.reglages.cheats,
 		"admin": est_admin(s.nom), "vitesse": vitesse_de(s), "vol": s.vol, "dieu": s.dieu,
 		"pvp": donnees.reglages.get("pvp", true), "role": s.role, "equipe": s.equipe,
-		"esquive": combat.recharge_esquive(s), "stats": s.stats,
+		"esquive": combat.recharge_esquive(s), "stats": s.stats, "caps": s.caps,
 	})
 
 

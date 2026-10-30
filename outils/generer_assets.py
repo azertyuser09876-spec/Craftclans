@@ -919,6 +919,21 @@ def generer_etape4():
     img.save(chemin("ui", "fabriquer.png"))
 
 
+def generer_etape5():
+    # bouton Personnage (silhouette et étoile de niveau)
+    img = Image.new("RGBA", (48, 48)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle([1, 1, 46, 46], radius=10, fill=(70, 100, 170, 255), outline=(20, 20, 26, 255), width=2)
+    d.ellipse([15, 8, 29, 22], fill=(235, 215, 190, 255), outline=C)
+    d.chord([9, 22, 35, 50], 180, 360, fill=(200, 210, 230, 255), outline=C)
+    etoile = []
+    for i in range(10):
+        a = -math.pi / 2 + i * math.pi / 5
+        r = 8 if i % 2 == 0 else 3.5
+        etoile.append((35 + r * math.cos(a), 14 + r * math.sin(a)))
+    d.polygon(etoile, fill=(255, 215, 70, 255), outline=C)
+    img.save(chemin("ui", "personnage.png"))
+
+
 if __name__ == "__main__":
     generer_sols()
     generer_arbre()
@@ -937,4 +952,5 @@ if __name__ == "__main__":
     generer_filons()
     generer_objets()
     generer_etape4()
+    generer_etape5()
     print("Assets générés dans", os.path.abspath(os.path.join(RACINE, "assets")))

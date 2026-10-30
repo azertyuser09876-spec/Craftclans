@@ -23,6 +23,7 @@ signal recolte_recue(progres: float, c: Vector2i)
 signal sacs_recus(liste: Array)
 signal sac_recu(infos: Dictionary)
 signal sac_retire(id: int)
+signal progression_recue(p: Dictionary)
 
 var serveur: Node = null # renseigné côté serveur
 var raison_refus := ""
@@ -209,6 +210,12 @@ func c_atelier(genre: String, valeur: String) -> void:
 	if serveur: serveur.sur_atelier(multiplayer.get_remote_sender_id(), genre, valeur)
 
 
+## Étape 5 : caractéristique (carac), rang de compétence (noeud « arbre:noeud ») ou oubli.
+@rpc("any_peer", "call_remote", "reliable")
+func c_progression(genre: String, valeur: String) -> void:
+	if serveur: serveur.sur_progression(multiplayer.get_remote_sender_id(), genre, valeur)
+
+
 @rpc("any_peer", "call_remote", "reliable")
 func c_jeter(case: int) -> void:
 	if serveur: serveur.sur_jeter(multiplayer.get_remote_sender_id(), case)
@@ -270,6 +277,11 @@ func s_case(c: Vector2i, deco: int) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_inventaire(inv: Array, equipement: Dictionary) -> void:
 	inventaire_recu.emit(inv, equipement)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_progression(p: Dictionary) -> void:
+	progression_recue.emit(p)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)

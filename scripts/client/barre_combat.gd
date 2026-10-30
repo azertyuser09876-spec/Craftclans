@@ -18,6 +18,8 @@ var vie := 100
 var vie_max := 100
 var recharges := {"attaque": 0.0, "competence": 0.0, "esquive": 0.0} # 0 = prêt, 1 = vient d'être utilisé
 var charge := -1.0 # charge de l'archer, -1 si rien
+var niveau := 1
+var part_xp := 0.0 # avancement dans le niveau (0 à 1)
 var _icone_role: Texture2D
 var _doigts := {} # index -> {genre, depart, vecteur, deplace}
 
@@ -67,6 +69,11 @@ func _draw() -> void:
 	draw_rect(Rect2(haut.position, Vector2(largeur * part, haut.size.y)), Color(0.85, 0.25, 0.22).lerp(Color(0.3, 0.8, 0.35), part))
 	draw_string(police, haut.position + Vector2(0, 17), "%d / %d" % [vie, vie_max], HORIZONTAL_ALIGNMENT_CENTER, largeur, 15)
 	draw_texture_rect(_icone_role, Rect2(haut.position + Vector2(-46, -12), Vector2(40, 40)), false)
+	# Niveau et expérience
+	var bx := Rect2(haut.position + Vector2(0, haut.size.y + 4), Vector2(largeur, 5))
+	draw_rect(bx, Color(0, 0, 0, 0.55))
+	draw_rect(Rect2(bx.position, Vector2(largeur * clampf(part_xp, 0.0, 1.0), bx.size.y)), Color(0.45, 0.7, 1.0))
+	draw_string(police, bx.position + Vector2(0, 19), "Niveau %d" % niveau, HORIZONTAL_ALIGNMENT_CENTER, largeur, 12)
 	# Charge de l'archer
 	if charge >= 0.0:
 		var c := Rect2(haut.position + Vector2(0, -12), Vector2(largeur * charge, 6))

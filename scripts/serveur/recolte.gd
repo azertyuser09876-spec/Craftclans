@@ -127,6 +127,7 @@ func _avancer_recolte(s: Dictionary, delta: float) -> void:
 	var centre := VueMonde.centre_case(c)
 	serveur.combat.evenement("recolte", {"id": s.id, "pos": centre, "angle": (centre - s.pos).angle(),
 		"objet": objet, "minerai": r.minerai})
+	serveur.experience.sur_recolte(s, objet, c)
 	var reste: int = _usure.get(c, int(r.coups)) - 1
 	if reste > 0:
 		_usure[c] = reste

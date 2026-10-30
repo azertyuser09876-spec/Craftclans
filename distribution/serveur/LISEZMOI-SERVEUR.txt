@@ -29,12 +29,13 @@ Ouvrir l'accès depuis Internet
 
 La fenêtre de gestion
   Tableau de bord : état, adresses, sauvegarde, réglages, mot de passe admin, carte du monde exploré.
-  Joueurs : rendre admin, téléporter, vitesse, vol, mode dieu, expulser, bannir,
+  Joueurs : niveau +1, rendre admin, téléporter, vitesse, vol, mode dieu, expulser, bannir,
             oublier un joueur (libère son pseudo s'il a changé de téléphone).
   Monde et triches : heure du jeu, vitesse du temps, mode développeur, triches,
             remise à zéro du monde (l'ancien est archivé, jamais effacé).
   Boss mondiaux : activer, endormir, programmer à une date ou chaque semaine.
-  Console : journal et commandes (tape « aide »).
+  Console : journal et commandes (tape « aide »). Étape 5 : progression <joueur>,
+            oublier <joueur>, et en triche xp [joueur] <nombre>, niveau [joueur] <1-30>.
 
 Devenir admin en jeu
   Le tout premier joueur qui se connecte devient admin. Sinon : /login <mot de passe>

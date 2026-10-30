@@ -30,6 +30,7 @@ Commandes sur PC
   F (maintenir) : récolter l'arbre, le rocher ou le filon le plus proche ; F : ramasser un sac ou un corps
   I ou Tab : inventaire et équipement (équiper, améliorer, poser une station, jeter)
   C : fabriquer
+  P : personnage (niveau, caractéristiques, arbres de compétences)
   Entrée : écrire dans le chat. /aide affiche les commandes.
   F3 : infos développeur (si le mode développeur est activé sur le serveur, ou pour les admins)
   Échap : menu
@@ -67,6 +68,18 @@ Fabriquer et s'équiper
   À l'enclume (ou l'établi), un objet porté peut être amélioré jusqu'à +3 en le mélangeant
   avec des ressources. Tout est fixe : rien n'est tiré au hasard.
   Démonter une station (F) la redonne. À ta mort, l'équipement tombe aussi sur ton corps.
+
+Niveaux et compétences
+  Récolter, fabriquer, ouvrir les coffres anciens et vaincre d'autres joueurs rapporte de
+  l'expérience (les mannequins aussi, jusqu'au niveau 5). Le niveau maximum est 30.
+  À chaque niveau : 3 points de caractéristiques (vitalité, force, défense, agilité, adresse,
+  savoir-faire) et 1 point de compétence.
+  Chaque rôle a son arbre de compétences (3 paliers). Tu peux aussi prendre un arbre secondaire
+  d'un autre rôle : 2 points par rang, et seulement les compétences qui ne changent pas une
+  capacité de ce rôle. Certaines compétences ne marchent qu'avec un certain équipement
+  (une arme, un outil, une armure complète, sans métal, ou en armure lourde).
+  Changer de rôle rend les points de compétence (le niveau reste). « Tout oublier » rend tous
+  les points contre des herbes médicinales.
 
 Équipes
   /equipe <nom> pour rejoindre une équipe : pas de dégâts entre coéquipiers,

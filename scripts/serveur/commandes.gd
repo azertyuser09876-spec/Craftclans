@@ -8,7 +8,7 @@ extends RefCounted
 var serveur: Node
 
 const PUBLIQUES := ["aide", "joueurs", "boss", "login", "moi", "equipe", "role", "roles", "objets"]
-const TRICHES := ["tp", "vitesse", "vol", "dieu", "soigner", "donner", "vider"]
+const TRICHES := ["tp", "vitesse", "vol", "dieu", "soigner", "donner", "vider", "xp", "niveau"]
 
 const AIDE := """Commandes :
   aide                      cette aide
@@ -37,6 +37,8 @@ Admin :
   monde                     infos sur le monde
   inventaire <joueur>       voir ce que porte un joueur
   sacs                      objets et corps au sol ; sacs retirer : tout enlever
+  progression <joueur>      niveau, caractéristiques et compétences d'un joueur
+  oublier <joueur>          rend gratuitement tous ses points (caractéristiques et compétences)
   boss activer|endormir <id>
   boss programmer <id> <AAAA-MM-JJ> <HH:MM>
   boss hebdo <id> <jour> <HH:MM>    (jour : lundi, mardi…)
@@ -48,7 +50,9 @@ Triche (admin, triches autorisées) :
   dieu [joueur]             invincible
   soigner [joueur]          remet la vie au maximum
   donner [joueur] <objet> [nombre]   (voir « objets »)
-  vider [joueur]            vide l'inventaire"""
+  vider [joueur]            vide l'inventaire
+  xp [joueur] <nombre>      donne de l'expérience
+  niveau [joueur] <1-30>    fixe le niveau (en baissant, les points sont rendus)"""
 
 
 func _init(p_serveur: Node) -> void:
@@ -191,6 +195,42 @@ func executer(ligne: String, auteur: Dictionary = {}) -> String:
 			lignes.append("Équipement : tete_, torse_, jambes_, pieds_ + %s ;" % _joindre(Equipement.MATERIAUX.keys(), ", "))
 			lignes.append("  arme_ + %s ; outil_ + %s" % [_joindre(Equipement.ARMES.keys(), ", "), _joindre(Equipement.OUTILS.keys(), ", ")])
 			return _joindre(lignes, "\n")
+		"xp":
+			var cible_x := _cible(args, auteur)
+			if cible_x.s.is_empty() or cible_x.args.is_empty() or not str(cible_x.args[0]).is_valid_int():
+				return "Utilisation : xp [joueur] <nombre>"
+			serveur.experience.gagner(cible_x.s, clampi(int(cible_x.args[0]), 0, 1000000))
+			return "%s est niveau %d." % [cible_x.s.nom, cible_x.s.progression.niveau]
+		"niveau":
+			var cible_n := _cible(args, auteur)
+			if cible_n.s.is_empty() or cible_n.args.is_empty() or not str(cible_n.args[0]).is_valid_int():
+				return "Utilisation : niveau [joueur] <1-%d>" % Progression.NIVEAU_MAX
+			serveur.experience.definir_niveau(cible_n.s, int(cible_n.args[0]))
+			return "%s est niveau %d." % [cible_n.s.nom, cible_n.s.progression.niveau]
+		"progression":
+			var cible_p := _cible(args, auteur)
+			if cible_p.s.is_empty(): return "Utilisation : progression <joueur>"
+			var p: Dictionary = cible_p.s.progression
+			var lignes := ["%s : niveau %d (%d/%d xp), %d point(s) de caractéristiques et %d de compétence à dépenser." % [
+				cible_p.s.nom, p.niveau, p.xp, Progression.xp_pour(p.niveau), Progression.points_caracs(p),
+				Progression.points_competence(p, cible_p.s.role)]]
+			var caracs := []
+			for c in Progression.ORDRE_CARACS:
+				caracs.append("%s %d" % [Progression.CARACS[c].nom, p.caracs[c]])
+			lignes.append("  " + _joindre(caracs, ", "))
+			for arbre in p.arbres:
+				var noeuds := []
+				for n in p.arbres[arbre]:
+					noeuds.append("%s %d" % [Progression.ARBRES[arbre][n].nom, p.arbres[arbre][n]])
+				lignes.append("  Arbre %s%s : %s" % [Roles.donnees(arbre).nom, " (secondaire)" if arbre == p.secondaire else "", _joindre(noeuds, ", ")])
+			lignes.append("  Bonus : " + Progression.decrire_stats(cible_p.s.stats))
+			return _joindre(lignes, "\n")
+		"oublier":
+			var cible_o := _cible(args, auteur)
+			if cible_o.s.is_empty(): return "Utilisation : oublier <joueur>"
+			Progression.oublier_tout(cible_o.s.progression)
+			serveur.experience.appliquer(cible_o.s)
+			return "Points de %s rendus." % cible_o.s.nom
 		"donner":
 			var cible_d := _cible(args, auteur)
 			if cible_d.s.is_empty() or cible_d.args.is_empty():

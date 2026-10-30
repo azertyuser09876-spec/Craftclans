@@ -39,12 +39,17 @@ func preparer_session(s: Dictionary, fiche: Dictionary) -> void:
 	s.dernier_combat = -100.0
 	s.dernier_vainqueur = ""
 	s.stats = Equipement.stats({})
+	s.caps = Progression.capacites(Progression.vierge(), s.role)
 
 
-## Bonus de l'équipement : vie, armure, dégâts, vitesse, récolte.
+## Bonus de l'équipement et de la progression (caractéristiques, arbres) : vie, armure, dégâts,
+## vitesse, récolte, recharges… et capacités du rôle modifiées par l'arbre principal.
 func recalculer(s: Dictionary) -> void:
 	var avant: int = s.vie_max
-	s.stats = Equipement.stats(s.get("equipement", {}))
+	var equipement: Dictionary = s.get("equipement", {})
+	var progression: Dictionary = s.get("progression", Progression.vierge())
+	s.stats = Progression.cumuler(Equipement.stats(equipement), Progression.stats(progression, s.role, equipement))
+	s.caps = Progression.capacites(progression, s.role, float(s.stats.get("recharge", 0.0)))
 	s.vie_max = int(Roles.donnees(s.role).vie) + int(round(s.stats.vie))
 	if not s.mort:
 		s.vie = clampi(s.vie + s.vie_max - avant, 1, s.vie_max)
@@ -54,12 +59,12 @@ func recalculer(s: Dictionary) -> void:
 func vitesse(s: Dictionary) -> float:
 	var v: float = Config.VITESSE_JOUEUR * float(Roles.donnees(s.role).vitesse) * float(s.vitesse) * (1.0 + s.stats.vitesse)
 	if _effet(s, "sprint") or _effet(s, "ruee"):
-		v *= 1.0 + float(Roles.donnees(s.role).competence.get("bonus", 0.0))
+		v *= 1.0 + float(s.caps.competence.get("bonus", 0.0))
 	return v
 
 
 func recharge_esquive(s: Dictionary) -> float:
-	return float(Roles.donnees(s.role).esquive)
+	return float(Roles.donnees(s.role).esquive) * (1.0 - float(s.stats.get("esquive", 0.0)))
 
 
 func a_effet(s: Dictionary, nom: String) -> bool:
@@ -93,8 +98,11 @@ func changer_role(s: Dictionary, role: String, force := false) -> String:
 		return "Rôle inconnu : %s" % role
 	if not force and temps - s.dernier_combat < HORS_COMBAT:
 		return "Impossible pendant un combat. Attends quelques secondes."
+	var change: bool = role != s.role
 	s.role = role
-	s.vie_max = int(Roles.donnees(role).vie) + int(round(s.stats.vie))
+	if change:
+		serveur.experience.sur_changement_role(s)
+	recalculer(s)
 	s.vie = s.vie_max
 	s.effets = {}
 	s.pret_attaque = 0.0
@@ -113,7 +121,7 @@ func action(s: Dictionary, genre: String, cible: Vector2, charge: float) -> void
 	var pret_cle := "pret_" + genre
 	if temps < s[pret_cle]:
 		return
-	var cap: Dictionary = Roles.donnees(s.role)[genre]
+	var cap: Dictionary = s.caps[genre]
 	charge = clampf(charge, 0.0, 1.0)
 	var pos: Vector2 = s.pos
 	var portee := Roles.portee(cap, charge)
@@ -204,8 +212,10 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 		montant *= 1.0 + source.stats.degats
 		m.vie = maxi(0, m.vie - int(round(montant)))
 		m.dernier = temps
+		_voler_vie(source, montant)
 		if m.vie == 0:
 			m.vie = m.max # un mannequin ne meurt pas : il se remet debout
+			serveur.experience.sur_mannequin(source)
 		_evenement("degats", {"cle": "m%d" % m.id, "montant": int(round(montant)), "pos": m.pos})
 		_fin_ombre(source)
 		return
@@ -217,7 +227,7 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 	if _effet(s, "bouclier"):
 		montant *= 1.0 - float(Roles.LISTE.paladin.competence.reduction)
 	if _effet(source, "ombre"):
-		montant *= 1.0 + float(Roles.LISTE.assassin.competence.bonus)
+		montant *= 1.0 + float(source.caps.competence.get("bonus", Roles.LISTE.assassin.competence.bonus))
 	montant *= (1.0 + source.stats.degats) * 100.0 / (100.0 + s.stats.armure)
 	_fin_ombre(source)
 	var n := maxi(1, int(round(montant)))
@@ -225,8 +235,18 @@ func infliger(source: Dictionary, c: Dictionary, montant: float) -> void:
 	s.dernier_combat = temps
 	source.dernier_combat = temps
 	_evenement("degats", {"cle": "j%d" % s.id, "montant": n, "pos": s.pos})
+	_voler_vie(source, n)
 	if s.vie == 0:
+		if source.id != s.id:
+			serveur.experience.sur_victoire(source, s)
 		mourir(s, source.nom)
+
+
+## Vol de vie (nœuds « Rage », « Saignée »…) : une part des dégâts soigne l'attaquant.
+func _voler_vie(source: Dictionary, montant: float) -> void:
+	var part := float(source.stats.get("vol_vie", 0.0))
+	if part > 0.0 and montant * part >= 0.5:
+		soigner(source, montant * part)
 
 
 func _fin_ombre(s: Dictionary) -> void:
